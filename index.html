@@ -554,7 +554,6 @@ place(aeron(), 1.28, 1.02, Math.PI);
     cyl(room, .11, .012, mBlack, W - .16, .726, z, 20); box(W - .17, W - .15, .73, .98, z - .02, z + .02, mBlack);
     box(W - .155, W - .13, .83, 1.17, z - .30, z + .30, mBlack, room, .008);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(.57, .32), new THREE.MeshBasicMaterial({ map: tex(monitorCanvas(i), 1, 1), color: '#b8b8b8' })); scr.rotation.y = -Math.PI / 2; scr.position.set(W - .156, 1.0, z); add(scr);
-    box(W - .40, W - .27, .72, .735, z - .21, z + .21, std({ color: '#e9e9e6', roughness: .5 }), room, .005);   // キーボード
     place(aeron(), W - .80, z, Math.PI / 2);
   });
 }
@@ -600,13 +599,13 @@ const SHELF_DX = 1.40;
     box(x, x + .006, 0, .012, z0, z1, mBlack, g);
   }
   // 置いてあるもの（白い収納ボックス・ファイル・小さな鉢）は仮
-  // バンカーズボックス風の書類箱（白い段ボール＋ふた＋持ち手穴）。幅340×奥行400×高さ260は記憶ベースの概寸で未確認
+  // バンカーズボックス風の書類箱（黒い段ボール＋ふた＋持ち手穴。フルブラックを想定）。幅340×奥行400×高さ260は記憶ベースの概寸で未確認
   // 脚の間（約64cm）には横に1箱しか入らない
   const bbox = (bx, by) => {
-    box(bx, bx + .34, by, by + .215, z0 + .005, z1 - .005, mWhite, g, .004);
-    box(bx - .004, bx + .344, by + .205, by + .26, z0, z1 + .002, mWhite, g, .004);
-    box(bx + .12, bx + .22, by + .12, by + .15, z1 - .006, z1 - .003, mBlack, g);
-    box(bx + .03, bx + .31, by + .03, by + .075, z1 - .006, z1 - .0045, std({ color: '#2a2b2d', roughness: .8 }), g);
+    box(bx, bx + .34, by, by + .215, z0 + .005, z1 - .005, mBlackSoft, g, .004);
+    box(bx - .004, bx + .344, by + .205, by + .26, z0, z1 + .002, mBlackSoft, g, .004);
+    box(bx + .12, bx + .22, by + .12, by + .15, z1 - .006, z1 - .003, mWhite, g);
+    box(bx + .03, bx + .31, by + .03, by + .075, z1 - .006, z1 - .0045, std({ color: '#e9e7e1', roughness: .8 }), g);
   };
   bbox(.70, .07); bbox(1.42, .07); bbox(.70, .72);
   let fx = .66; for (let k = 0; k < 11; k++) { const w = rr(.03, .05); box(fx, fx + w, .425, .425 + rr(.2, .25), z0 + .07, z1 - .06, std({ color: ['#2c2e30', '#e9e7e1', '#8c6540', '#4b5648'][k % 4], roughness: .7 }), g); fx += w + .004; }
@@ -626,7 +625,7 @@ const SHELF_DX = 1.40;
 // プランター（観葉植物）
 function plant(x, z, s = 1) {
   const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); add(g);
-  cyl(g, .15, .40, mWhite, 0, .20, 0, 28, .19); cyl(g, .17, .01, mSoil, 0, .385, 0, 20);
+  cyl(g, .15, .40, mBlackSoft, 0, .20, 0, 28, .19); cyl(g, .17, .01, mSoil, 0, .385, 0, 20);   // 鉢は黒（JUN 11/13）
   cyl(g, .022, .5, std({ color: '#6b5a44', roughness: .9 }), 0, .63, 0, 8, .016);
   const lg = new THREE.PlaneGeometry(.075, .62, 1, 5); lg.translate(0, .31, 0);
   const p = lg.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 - (y / .62) ** 2 * .9)); p.setZ(i, y * y * .75); } lg.computeVertexNormals();
@@ -649,24 +648,24 @@ screen.visible = false;
 // ============================================================
 const mDark = std({ color: '#1b1c1e', roughness: .5, metalness: .25 });
 // 山崎実業 tower 風の小物：ティッシュケース（白）×3、角形ゴミ箱（白）×3
-const tissue = (x, y, z, rot = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rot; add(g); part(g, .26, .075, .135, mWhite, 0, .0375, 0, .008); part(g, .12, .002, .03, mDark, 0, .076, 0); return sh(g); };
+const tissue = (x, y, z, rot = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rot; add(g); part(g, .26, .075, .135, mDark, 0, .0375, 0, .008); part(g, .12, .002, .03, mWhite, 0, .076, 0); return sh(g); };
 tissue(.78, .72, .19); tissue(2.62, .72, 2.54); tissue(W - .30, .72, 3.02, Math.PI / 2);
-const trash = (x, z) => { const g = new THREE.Group(); g.position.set(x, 0, z); add(g); part(g, .19, .40, .285, mWhite, 0, .20, 0, .012); part(g, .15, .006, .245, mDark, 0, .401, 0); blob(x, z, .45, .5, .7); return sh(g); };
+const trash = (x, z) => { const g = new THREE.Group(); g.position.set(x, 0, z); add(g); part(g, .19, .40, .285, mDark, 0, .20, 0, .012); part(g, .15, .006, .245, std({ color: '#060607', roughness: .6 }), 0, .401, 0); blob(x, z, .45, .5, .7); return sh(g); };
 trash(3.50, .34); trash(W - .30, 3.34); trash(3.40, 4.33);
-// 傘立て（山崎実業風・スリム白）：扉を入って右
+// 傘立て（山崎実業風・黒）：扉を入って右
 { const g = new THREE.Group(); g.position.set(4.72, 0, .16); add(g);
-  part(g, .40, .02, .16, mWhite, 0, .01, 0, .006); for (const x of [-.19, .19]) part(g, .012, .50, .012, mWhite, x, .26, -.07);
-  part(g, .40, .012, .012, mWhite, 0, .50, -.07); part(g, .40, .012, .012, mWhite, 0, .50, .07); for (const x of [-.19, .19]) part(g, .012, .012, .15, mWhite, x, .50, 0);
+  part(g, .40, .02, .16, mDark, 0, .01, 0, .006); for (const x of [-.19, .19]) part(g, .012, .50, .012, mDark, x, .26, -.07);
+  part(g, .40, .012, .012, mDark, 0, .50, -.07); part(g, .40, .012, .012, mDark, 0, .50, .07); for (const x of [-.19, .19]) part(g, .012, .012, .15, mDark, x, .50, 0);
   for (const [x, c] of [[-.1, '#20242c'], [.02, '#e8e6df'], [.12, '#3c4a3f']]) { const u = cyl(g, .022, .78, std({ color: c, roughness: .8 }), x, .41, 0, 10, .012); u.rotation.z = rr(-.06, .06); }
   sh(g); blob(4.72, .2, .7, .45, .6); }
 // 空気清浄機（BALMUDA The Pure ダークグレーを想定・W260×D260×H700）：扉を入って右、傘立ての先
 { const g = new THREE.Group(); g.position.set(5.06, 0, .19); add(g);
   part(g, .26, .66, .26, std({ color: '#3b3c3e', roughness: .6 }), 0, .37, 0, .02); part(g, .22, .04, .22, std({ color: '#1c1d1f', roughness: .5 }), 0, .02, 0);
   part(g, .20, .012, .20, std({ color: '#141516', roughness: .4 }), 0, .705, 0); sh(g); blob(5.06, .22, .5, .5, .6); }
-// 玄関マット（グレー・900×600）＋ MORE TIME ロゴ（∞を上下に重ねたマーク＋ more time。~/Downloads/MORETIME_C_monochrome_vector.svg、2026-10-26。10/30 に白井さんへ送った「最終版ロゴ」と同じものかは添付名までは未照合）
+// 玄関マット（彩度を落とした抹茶色・900×600。JUN 11/13）＋ MORE TIME ロゴ（∞を上下に重ねたマーク＋ more time。~/Downloads/MORETIME_C_monochrome_vector.svg、2026-10-26。10/30 に白井さんへ送った「最終版ロゴ」と同じものかは添付名までは未照合）
 { const [c, x] = canvas(900, 600); const t = tex(c, 1, 1);
-  const paint = logo => { x.globalCompositeOperation = 'source-over'; x.fillStyle = '#8b8b88'; x.fillRect(0, 0, 900, 600); grain(x, 900, 600, 16);
-    x.strokeStyle = 'rgba(40,40,40,.35)'; x.lineWidth = 10; x.strokeRect(5, 5, 890, 590);
+  const paint = logo => { x.globalCompositeOperation = 'source-over'; x.fillStyle = '#4e553a'; x.fillRect(0, 0, 900, 600); grain(x, 900, 600, 16);
+    x.strokeStyle = 'rgba(40,48,20,.45)'; x.lineWidth = 10; x.strokeRect(5, 5, 890, 590);
     if (logo) x.drawImage(logo, 215, 80, 469, 440); t.needsUpdate = true; };
   paint(null);
   const img = new Image(); img.onload = () => {   // ロゴ（1254角の版面）を拡大して切り出し、白一色に塗り替えてから載せる（マットはグラデーションを再現できないため）
@@ -684,12 +683,12 @@ trash(3.50, .34); trash(W - .30, 3.34); trash(3.40, 4.33);
   box(.68, .93, y, y + .47, .07, .365, mDark, g, .02); box(.74, .87, y + .14, y + .30, .365, .37, std({ color: '#0d0e0f', roughness: .2 }), g); box(.74, .87, y, y + .012, .365, .40, mDark, g);
   cyl(g, .05, .012, mAlu, .805, y + .476, .2, 20);
   box(1.00, 1.18, y, y + .30, .07, .388, mDark, g, .02); box(1.03, 1.15, y + .11, y + .19, .388, .40, mDark, g); box(1.02, 1.16, y, y + .015, .388, .42, mDark, g); cyl(g, .035, .09, mWhite, 1.09, y + .06, .40, 16, .03);
-  cyl(g, .045, .13, mWhite, 1.70, y + .065, .30, 18); for (let k = 0; k < 7; k++) { const c = cyl(g, .003, .19, mAlu, 1.70 + rr(-.02, .02), y + .15, .30 + rr(-.02, .02), 6); c.rotation.set(rr(-.12, .12), 0, rr(-.12, .12)); }   // カトラリースタンド
+  cyl(g, .045, .13, mDark, 1.70, y + .065, .30, 18); for (let k = 0; k < 7; k++) { const c = cyl(g, .003, .19, mAlu, 1.70 + rr(-.02, .02), y + .15, .30 + rr(-.02, .02), 6); c.rotation.set(rr(-.12, .12), 0, rr(-.12, .12)); }   // カトラリースタンド
   cyl(g, .05, .14, mDark, 1.82, y + .07, .16, 20, .038); cyl(g, .012, .012, mAlu, 1.82, y + .146, .16, 10);  // アロマディフューザー（黒）
   sh(g); }
-// 洗面：液体石鹸ディスペンサー（白）と、トイレ用の白いリードディフューザー
+// 洗面：液体石鹸ディスペンサー（黒）と、トイレ用の白いリードディフューザー（白い候補品のまま）
 { const g = new THREE.Group(); add(g);
-  box(5.71, 5.78, .84, .98, 3.80, 3.87, mWhite, g, .008); cyl(g, .008, .05, mAlu, 5.745, 1.005, 3.835, 10); part(g, .012, .012, .06, mAlu, 5.745, 1.03, 3.86);
+  box(5.71, 5.78, .84, .98, 3.80, 3.87, mDark, g, .008); cyl(g, .008, .05, mAlu, 5.745, 1.005, 3.835, 10); part(g, .012, .012, .06, mAlu, 5.745, 1.03, 3.86);
   cyl(g, .035, .09, mWhite, 6.02, .885, 3.84, 18, .04); for (let k = 0; k < 6; k++) { const c = cyl(g, .002, .22, std({ color: '#d8cdb8', roughness: .9 }), 6.02, 1.03, 3.84, 5); c.rotation.set(rr(-.25, .25), 0, rr(-.25, .25)); }
   sh(g); }
 // プロジェクター（天吊り・XGIMI HORIZON 20 Max を想定）と投影イメージ（約110インチ）。白壁のときだけ表示
@@ -699,23 +698,23 @@ const projG = new THREE.Group(); add(projG);
   part(projG, .27, .17, .25, std({ color: '#3a3733', roughness: .45, metalness: .4 }), px, 2.27, pz, .02);
   const lens = cyl(projG, .045, .02, std({ color: '#0a0a0b', roughness: .1, metalness: .6 }), px - .14, 2.27, pz, 20); lens.rotation.z = Math.PI / 2;
 }
-// HomePod ×2（ホワイト）＋白いスピーカースタンド：アートの左右
+// HomePod ×2（ミッドナイト＝黒）＋黒いスピーカースタンド：アートの左右
 for (const z of [1.28, 3.84]) { const g = new THREE.Group(); g.position.set(.30, 0, z); add(g);
-  cyl(g, .12, .012, mWhite, 0, .006, 0, 24); cyl(g, .014, .78, mWhite, 0, .40, 0, 10); cyl(g, .075, .008, mWhite, 0, .794, 0, 20);
-  const hp = new THREE.Mesh(new THREE.SphereGeometry(.086, 28, 20), std({ color: '#f1f0ec', roughness: .85 })); hp.scale.y = .98; hp.position.y = .88; g.add(hp);
-  cyl(g, .05, .004, std({ color: '#dcdcd8', roughness: .15 }), 0, .966, 0, 20); sh(g); blob(.30, z, .4, .4, .6); }
-// スタンドライト ×2：gram eight「LED バーライト ネオマンクス たて置きベースセット」（ホワイト・直径25.5mmのバー・高さ約1.22m・約10cm角の大理石ベース）。白壁の両端（観葉植物の脇）で壁を照らす
+  cyl(g, .12, .012, mDark, 0, .006, 0, 24); cyl(g, .014, .78, mDark, 0, .40, 0, 10); cyl(g, .075, .008, mDark, 0, .794, 0, 20);
+  const hp = new THREE.Mesh(new THREE.SphereGeometry(.086, 28, 20), std({ color: '#202124', roughness: .85 })); hp.scale.y = .98; hp.position.y = .88; g.add(hp);
+  cyl(g, .05, .004, std({ color: '#0b0b0c', roughness: .15 }), 0, .966, 0, 20); sh(g); blob(.30, z, .4, .4, .6); }
+// スタンドライト ×2：gram eight「LED バーライト ネオマンクス たて置きベースセット」（ブラック・直径25.5mmのバー・高さ約1.22m・約10cm角の大理石ベース）。白壁の両端（観葉植物の脇）で壁を照らす
 for (const z of [.93, 4.86]) { const g = new THREE.Group(); g.position.set(.08, 0, z); add(g);   // 白壁の両端、観葉植物のすぐ脇（壁と柱の角）
   part(g, .10, .07, .10, std({ color: '#121213', roughness: .25, metalness: .1 }), 0, .035, 0, .004);
-  cyl(g, .0128, 1.15, mWhite, 0, .07 + .575, 0, 14);
+  cyl(g, .0128, 1.15, mDark, 0, .07 + .575, 0, 14);   // バーは黒（JUN 11/13）
   part(g, .004, 1.10, .016, new THREE.MeshBasicMaterial({ color: '#ffe2b8' }), -.0125, .07 + .575, 0).castShadow = false;
   const pl = new THREE.PointLight('#ffd3a0', 1.3, 2.4, 2); pl.position.set(-.04, .75, 0); g.add(pl);
   sh(g); }
-// 掛け時計（白・直径30cm）：棚の上の壁
+// 掛け時計（黒・直径30cm、BRAUN BC17B を想定）：デスクの上の壁
 { const g = new THREE.Group(); g.position.set(1.27, 1.90, .012); add(g);
-  const f = cyl(g, .15, .03, mWhite, 0, 0, .015, 40); f.rotation.x = Math.PI / 2; const d = cyl(g, .138, .002, std({ color: '#fbfaf7', roughness: .6 }), 0, 0, .031, 40); d.rotation.x = Math.PI / 2;
-  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; part(g, .006, .024, .002, mDark, Math.sin(a) * .118, Math.cos(a) * .118, .033).rotation.z = -a; }
-  const hh = part(g, .008, .075, .002, mDark, .026, .026, .034); hh.rotation.z = -Math.PI / 4; const mh = part(g, .006, .11, .002, mDark, -.045, .028, .035); mh.rotation.z = 1.02; }
+  const f = cyl(g, .15, .03, mDark, 0, 0, .015, 40); f.rotation.x = Math.PI / 2; const d = cyl(g, .138, .002, std({ color: '#111112', roughness: .6 }), 0, 0, .031, 40); d.rotation.x = Math.PI / 2;
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; part(g, .006, .024, .002, mWhite, Math.sin(a) * .118, Math.cos(a) * .118, .033).rotation.z = -a; }
+  const hh = part(g, .008, .075, .002, mWhite, .026, .026, .034); hh.rotation.z = -Math.PI / 4; const mh = part(g, .006, .11, .002, mWhite, -.045, .028, .035); mh.rotation.z = 1.02; }
 // 壁の絵（黒フレーム 50×70cm ×3・中心の高さ1.45m・抽象画のイメージ）：白壁（鏡を外したあとの壁）に3枚。絵柄は仮
 [1.75, 2.55, 3.35].forEach((z, i) => {
   const [c, x] = canvas(450, 600); x.fillStyle = ['#d9d2c4', '#cfc6b6', '#ddd6ca'][i]; x.fillRect(0, 0, 450, 600);
@@ -782,21 +781,21 @@ list.innerHTML = '<h2>B1F の備品と根拠（LINE 11/12 時点）</h2><div cla
   ['電子レンジ 黒<br>パナソニックの黒（単機能 NE-FB2D-K を想定、W470×D390×H350）。冷蔵庫の上。冷蔵庫の天板の耐熱・耐荷重は要確認', '候補', 2],
   ['アーロンチェア ×3<br>ローカウンター用', '選定済', 2],
   ['ローカウンター<br>造作。棚・ベンチとあわせて同じラバーウッド ブラウンの色に統一', '造作', 2],
-  ['モニター ×3（ローカウンター用）<br>これから購入。画面は24インチ相当で仮置き', '未購入', 3],
+  ['モニター ×3（ローカウンター用）<br>これから購入。画面は24インチ相当で仮置き。キーボードは置かない', '未購入', 3],
   ['プロジェクター（天吊り）<br>XGIMI HORIZON 20 Max を想定（5,700 ISOルーメン、HDMI×2）。純正の天吊り金具はコンクリート天井専用。投影面は未決定（白壁に絵を掛けるため）。地デジは外付けレコーダー等が必要（部屋のアンテナ端子しだい）', '候補', 3],
   ['空気清浄機<br>BALMUDA The Pure（ダークグレー・36畳・W260×D260×H700、約45,800円）を想定。扉を入って右。加湿なし', '候補', 3],
   ['スタンドライト ×2<br>gram eight「LED バーライト ネオマンクス たて置きベースセット」（40,700円×2）。高さ約1.22m、調光・調色、リモコンとアプリ対応。白壁の両端、観葉植物の脇に置いて壁を照らす', '候補', 3],
   ['HomePod ×2＋スピーカースタンド<br>HomePodはプロジェクターに直接つながらない。Apple TV 4K を挟み、HDMI eARC 経由で音を出す構成', '候補', 3],
   ['コーヒーコーナー（棚の上）<br>卓上ウォーターサーバー（黒）、カプセル式コーヒーメーカー（黒）、カトラリースタンド、アロマディフューザー。共用マグはキッチンに収納するため置かない', '候補', 3],
-  ['掛け時計／壁の絵 ×3<br>時計は棚の上の壁。絵は INDOORPLUS の掛け絵（50×70cm・黒フレーム）を白壁に3枚、中心の高さ1.45m。絵柄は仮。白壁に絵を掛けるとプロジェクターを映す面と重なるため、投影場所は要検討。壁がコンクリートなので掛け方は要検討', '候補', 3],
-  ['玄関マット（MORE TIME ロゴ入り）／傘立て<br>扉を入ってすぐ。マットはグレー・900×600（仮）に、∞を上下に重ねたマーク＋ more time のロゴ（10/26 の SVG）を白一色で', '候補', 3],
-  ['洗面：液体石鹸ディスペンサー（白）／白いリードディフューザー', '候補', 3],
+  ['掛け時計／壁の絵 ×3<br>時計は黒（BRAUN BC17B を想定）でデスクの上の壁。絵は INDOORPLUS の掛け絵（50×70cm・黒フレーム）を白壁に3枚、中心の高さ1.45m。絵柄は仮。白壁に絵を掛けるとプロジェクターを映す面と重なるため、投影場所は要検討。壁がコンクリートなので掛け方は要検討', '候補', 3],
+  ['玄関マット（MORE TIME ロゴ入り）／傘立て<br>扉を入ってすぐ。マットは抹茶色・900×600（仮）に、∞を上下に重ねたマーク＋ more time のロゴ（10/26 の SVG）を白一色で', '候補', 3],
+  ['洗面：液体石鹸ディスペンサー（黒）／リードディフューザー<br>ディスペンサーは山崎実業の黒。トイレ用ディフューザーは白い候補品のまま（黒い候補は未選定）', '候補', 3],
   ['棚 W1300×D400×H約1080<br>KANADEMONO THE STORAGE SHELF 4段／ラバーウッド ブラウン × Black Steel（89,900円〜）。入って右、扉のすぐ先（デスクと位置を入れ替え）。高さは推定。書類箱はバンカーズボックス（A4用）を想定し、奥行を400に', '候補', 2],
   ['ラグ ライトグレー 3.6×2.6m<br>東リ グレース GJ2549（土足可・業務3ランク、ナイロンのループパイル、撥水防汚・防炎）。自動見積もり 税込50,783円＋短辺2m超の製作費。実物の色は未確認', '候補', 3],
   ['ベンチ W1500×D300<br>KANADEMONO THE BENCH（BNC-K11-LN）を想定。高さは未確認で43cmと仮定', '候補', 2],
   ['デスクチェア ×1／プランター ×2', '未選定・仮', 3],
   ['鍵付き書類ボックス 白 ×2<br>サンワダイレクト 100-LBOX006W（W350×D350×H350・積み重ね可）を想定。ロッカーの右どなり。山崎実業に鍵付きの書類収納は無い', '候補', 3],
-  ['ゴミ箱 ×3／ティッシュケース ×3／傘立て<br>山崎実業（tower）の白を想定。土足運用なので下駄箱なし', '候補', 3],
+  ['ゴミ箱 ×3／ティッシュケース ×3／傘立て<br>小物は黒で統一（JUN 11/13）。山崎実業（tower）の黒を想定。土足運用なので下駄箱なし', '候補', 3],
   ['鏡 → 白壁<br>鏡はすべて外して白壁にする予定。「鏡あり（現状）」で切替', '予定', 2],
   ['ステンレス曲面壁・洗面・照明・エアコン<br>現地写真のとおり既存を再現', '既存', 3],
 ].map(([a, b, c]) => `<tr><td>${a}</td><td class="st${c}">${b}</td></tr>`).join('') + '</table>';
