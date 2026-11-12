@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>MORE TIME 五反田 — B1F スタッフルーム</title>
+<style>
+  html, body { margin:0; height:100%; background:#141516; color:#f2efe9; font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif; overflow:hidden; }
+  canvas { display:block; }
+  #panel { position:fixed; left:16px; top:16px; width:268px; background:rgba(20,21,22,.78); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:14px 14px 12px; font-size:12px; line-height:1.6; }
+  #panel h1 { font-size:14px; margin:0 0 2px; letter-spacing:.06em; }
+  #panel .sub { color:#a9a49b; margin-bottom:10px; }
+  #panel .row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 10px; }
+  #panel .cap { color:#a9a49b; font-size:11px; margin-top:6px; }
+  button, a.btn { font:inherit; color:#f2efe9; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); border-radius:7px; padding:5px 9px; cursor:pointer; text-decoration:none; }
+  button.on { background:#f2efe9; color:#141516; }
+  #list { position:fixed; right:16px; top:16px; width:300px; max-height:calc(100% - 32px); overflow:auto; background:rgba(20,21,22,.78); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:12px 14px; font-size:11.5px; line-height:1.55; display:none; }
+  #list h2 { font-size:12.5px; margin:0 0 6px; }
+  #list table { border-collapse:collapse; width:100%; }
+  #list td { padding:4px 0; border-top:1px solid rgba(255,255,255,.1); vertical-align:top; }
+  #list td:last-child { text-align:right; white-space:nowrap; padding-left:8px; }
+  .st1 { color:#9fd6a4; } .st2 { color:#e6cf8a; } .st3 { color:#b3aea5; }
+  .tag { position:fixed; transform:translate(-50%,-100%); background:rgba(20,21,22,.82); border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:2px 7px; font-size:11px; white-space:nowrap; pointer-events:none; }
+  #load { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#141516; font-size:13px; color:#a9a49b; }
+  @media (max-width:760px) { #panel { width:auto; right:10px; left:10px; top:10px; padding:10px 12px 8px; } #panel .row { margin:4px 0 6px; } #panel .sub { margin-bottom:4px; } #list { top:auto; bottom:16px; left:16px; width:auto; max-height:40%; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="load">B1F を組み立てています…</div>
+<div id="panel">
+  <h1>MORE TIME 五反田</h1>
+  <div class="sub">B1F スタッフルーム ／ CH 2,651</div>
+  <div class="cap">視点</div>
+  <div class="row" id="views"></div>
+  <div class="cap">表示</div>
+  <div class="row">
+    <button id="bScreen">鏡あり（現状）</button>
+    <button id="bTags">備品名</button>
+    <button id="bList">備品リスト</button>
+  </div>
+  <div class="cap" id="hint">ドラッグで見回す ／ ホイールで寄る ／ 右ドラッグで移動</div>
+</div>
+<div id="list"></div>
+<div id="tags"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+// ============================================================
+// 寸法（メートル）。原点＝鏡の面と階段側の壁が交わる床の角
+//   x：鏡（0）→ 駐車場側の壁（W） ／ z：階段側の壁（0）→ ロッカー側の壁（D） ／ y：高さ
+// 実施図面（ChronoBa A-02-00）の寸法から換算
+// ============================================================
+const W = 6.23, D = 5.89, H = 2.651;
+const ARC = { cx: W, cz: 5.19, r: 2.0 };     // 曲面のステンレス壁（R2000）
+
+// ---------- 乱数（毎回同じ模様になるよう種を固定） ----------
+let _s = 20261112;
+const rnd = () => { _s |= 0; _s = _s + 0x6D2B79F5 | 0; let t = Math.imul(_s ^ _s >>> 15, 1 | _s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const rr = (a, b) => a + (b - a) * rnd();
+
+// ---------- 質感の画像をその場で描く ----------
+function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
+// ぼんやりしたムラ（大きさの違う乱数の重ね合わせ）
+function mottle(g, w, h, octaves, alpha, dark = '0,0,0', light = '255,255,255') {
+  for (const n of octaves) {
+    const [c, x] = canvas(n, Math.max(2, Math.round(n * h / w)));
+    const im = x.createImageData(c.width, c.height);
+    for (let i = 0; i < im.data.length; i += 4) { const v = rnd(); const col = (v < .5 ? dark : light).split(','); im.data[i] = +col[0]; im.data[i+1] = +col[1]; im.data[i+2] = +col[2]; im.data[i+3] = Math.abs(v - .5) * 2 * 255 * alpha; }
+    x.putImageData(im, 0, 0);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(c, 0, 0, w, h);
+  }
+}
+function grain(g, w, h, amount) {
+  const im = g.getImageData(0, 0, w, h);
+  for (let i = 0; i < im.data.length; i += 4) { const d = (rnd() - .5) * amount; im.data[i] += d; im.data[i+1] += d; im.data[i+2] += d; }
+  g.putImageData(im, 0, 0);
+}
+function tex(c, rx = 1, ry = 1, srgb = true) {
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+}
+// 白く塗った荒いコンクリート壁（型枠の継ぎ目・セパ穴・欠け・擦り傷）。1枚＝3m角
+function wallCanvas() {
+  const S = 1024, [c, g] = canvas(S, S), m = S / 3;
+  g.fillStyle = '#ecebe6'; g.fillRect(0, 0, S, S);
+  mottle(g, S, S, [5, 11, 23, 47], .08, '120,120,112', '255,255,252');
+  // 欠け・剥がれ
+  for (let i = 0; i < 45; i++) {
+    const x = rr(0, S), y = rr(0, S), r = rr(3, 13);
+    g.fillStyle = `rgba(${rr(150,185)|0},${rr(148,180)|0},${rr(135,165)|0},${rr(.12,.32)})`;
+    g.beginPath(); for (let k = 0; k < 9; k++) { const a = k / 9 * Math.PI * 2, q = r * rr(.5, 1.15); g.lineTo(x + Math.cos(a) * q * 1.6, y + Math.sin(a) * q * .7); } g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.5)'; g.lineWidth = 1; g.stroke();
+  }
+  // 型枠の継ぎ目（横0.45m・縦0.9m）
+  g.lineCap = 'round';
+  for (let y = 0; y < S; y += m * .45) for (let x = 0; x < S; x += 24) {
+    g.strokeStyle = `rgba(95,92,80,${rr(.12,.4)})`; g.lineWidth = rr(.8, 2.2);
+    g.beginPath(); g.moveTo(x, y + rr(-1.5, 1.5)); g.lineTo(x + 24, y + rr(-1.5, 1.5)); g.stroke();
+  }
+  for (let row = 0; row < 7; row++) for (let x = (row % 2) * m * .45; x < S; x += m * .9) {
+    g.strokeStyle = `rgba(95,92,80,${rr(.15,.35)})`; g.lineWidth = rr(.8, 1.8);
+    g.beginPath(); g.moveTo(x + rr(-1, 1), row * m * .45); g.lineTo(x + rr(-1, 1), (row + 1) * m * .45); g.stroke();
+  }
+  // セパ穴
+  for (let y = m * .22; y < S; y += m * .45) for (let x = m * .2; x < S; x += m * .6) {
+    g.fillStyle = 'rgba(70,68,60,.55)'; g.beginPath(); g.arc(x + rr(-6, 6), y + rr(-4, 4), rr(2.5, 4.5), 0, 7); g.fill();
+  }
+  // 擦り傷
+  for (let i = 0; i < 260; i++) {
+    const x = rr(0, S), y = rr(0, S), a = rr(0, Math.PI), l = rr(6, 46);
+    g.strokeStyle = rnd() < .6 ? `rgba(110,106,92,${rr(.15,.45)})` : 'rgba(255,255,255,.5)'; g.lineWidth = rr(.6, 1.8);
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a) * l * .5 + rr(-6, 6), y + Math.sin(a) * l * .5 + rr(-6, 6), x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  grain(g, S, S, 14);
+  return c;
+}
+// 床：モルタル薄塗り＋防塵クリア。1枚＝4m角
+function floorCanvas() {
+  const S = 1024, [c, g] = canvas(S, S);
+  g.fillStyle = '#cfcfca'; g.fillRect(0, 0, S, S);
+  mottle(g, S, S, [3, 6, 13, 29, 61], .12, '110,108,100', '250,250,246');
+  for (let i = 0; i < 26; i++) { const x = rr(0, S), y = rr(0, S), r = rr(30, 120); const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${rnd() < .5 ? '120,112,98' : '240,240,236'},${rr(.05,.14)})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
+  for (let i = 0; i < 18; i++) { let x = rr(0, S), y = rr(0, S); g.strokeStyle = 'rgba(90,88,82,.22)'; g.lineWidth = .8; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 9; k++) { x += rr(-22, 22); y += rr(-22, 22); g.lineTo(x, y); } g.stroke(); }
+  grain(g, S, S, 10);
+  return c;
+}
+// 天井：コンクリート打放しのスラブ（板目の型枠跡）。1枚＝3m角
+function slabCanvas() {
+  const S = 1024, [c, g] = canvas(S, S);
+  g.fillStyle = '#807e7a'; g.fillRect(0, 0, S, S);
+  mottle(g, S, S, [4, 9, 21, 45], .16, '58,56,52', '176,174,168');
+  for (let x = 0; x < S; x += S / 20) { g.fillStyle = `rgba(${rnd() < .5 ? '40,38,35' : '190,188,182'},${rr(.03,.10)})`; g.fillRect(x, 0, S / 20, S); g.fillStyle = 'rgba(40,36,30,.35)'; g.fillRect(x, 0, 1.4, S); }
+  for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(50,45,38,${rr(.05,.2)})`; g.fillRect(rr(0, S), rr(0, S), rr(1, 3), rr(10, 90)); }
+  grain(g, S, S, 16);
+  return c;
+}
+// 木目（天然木の明るめの天板）
+function woodCanvas(base = '#7c4a30', dark = '46,24,13') {
+  const [c, g] = canvas(1024, 512);
+  g.fillStyle = base; g.fillRect(0, 0, 1024, 512);
+  for (let i = 0; i < 9; i++) { g.fillStyle = `rgba(${rnd() < .5 ? dark : '168,108,74'},${rr(.05,.14)})`; g.fillRect(0, i * 57, 1024, 57); g.fillStyle = `rgba(${dark},.25)`; g.fillRect(0, i * 57, 1024, 1); }
+  for (let i = 0; i < 520; i++) {
+    let y = rr(0, 512); const x0 = rr(-200, 1024), l = rr(120, 700);
+    g.strokeStyle = `rgba(${dark},${rr(.04,.2)})`; g.lineWidth = rr(.5, 1.6);
+    g.beginPath(); g.moveTo(x0, y); for (let x = x0; x < x0 + l; x += 40) { y += rr(-1.6, 1.6); g.lineTo(x, y); } g.stroke();
+  }
+  grain(g, 1024, 512, 8);
+  return c;
+}
+// ステンレス（バイブレーション仕上げ）
+function susCanvas() {
+  const S = 512, [c, g] = canvas(S, S);
+  g.fillStyle = '#c6c9ca'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 5000; i++) { const x = rr(0, S), y = rr(0, S), a = rr(0, 7), r = rr(3, 9); g.strokeStyle = `rgba(${rnd() < .5 ? '255,255,255' : '90,92,92'},${rr(.05,.16)})`; g.lineWidth = .6; g.beginPath(); g.arc(x, y, r, a, a + rr(.6, 2)); g.stroke(); }
+  return c;
+}
+// 25mm角の白モザイクタイル（1枚＝0.2m角）
+function mosaicCanvas() {
+  const S = 256, [c, g] = canvas(S, S), n = 8, p = S / n;
+  g.fillStyle = '#d9d8d2'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = rr(236, 247) | 0; g.fillStyle = `rgb(${v},${v},${v - 3})`; g.fillRect(i * p + 1.5, j * p + 1.5, p - 3, p - 3); }
+  return c;
+}
+// ガラスブロック越しの外光
+function glassBlockCanvas() {
+  const [c, g] = canvas(256, 128);
+  g.fillStyle = '#9db6c9'; g.fillRect(0, 0, 256, 128);
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) { const gr = g.createRadialGradient(i * 32 + 16, j * 32 + 16, 2, i * 32 + 16, j * 32 + 16, 22); gr.addColorStop(0, `rgba(235,245,255,${rr(.6,.95)})`); gr.addColorStop(1, 'rgba(110,150,185,.9)'); g.fillStyle = gr; g.fillRect(i * 32 + 2, j * 32 + 2, 28, 28); }
+  return c;
+}
+// 監視カメラのモニター画面
+function monitorCanvas(k) {
+  const [c, g] = canvas(512, 288); g.fillStyle = '#0c0e10'; g.fillRect(0, 0, 512, 288);
+  const names = [['1F エントランス', '1F キッズ', '2F サロン', '3F トリミング'], ['B1 駐車場', '階段', '3F ホテル', '外観'], ['予約', 'シフト', 'タスク', '入退室']][k];
+  for (let i = 0; i < 4; i++) {
+    const x = (i % 2) * 256 + 4, y = (i >> 1) * 144 + 4;
+    const gr = g.createLinearGradient(x, y, x + 248, y + 136); gr.addColorStop(0, `hsl(${k === 2 ? 150 : 210 + i * 12},${k === 2 ? 12 : 16}%,${rr(26,40)}%)`); gr.addColorStop(1, `hsl(${30 + i * 8},14%,${rr(44,60)}%)`);
+    g.fillStyle = gr; g.fillRect(x, y, 248, 136);
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x, y + 86, 248, 50);
+    g.fillStyle = 'rgba(255,255,255,.14)'; for (let q = 0; q < 4; q++) g.fillRect(x + rr(10, 190), y + rr(30, 90), rr(20, 60), rr(14, 44));
+    g.fillStyle = '#fff'; g.font = '13px sans-serif'; g.fillText(names[i], x + 8, y + 18);
+    g.fillStyle = '#ff5a4d'; g.beginPath(); g.arc(x + 236, y + 13, 4, 0, 7); g.fill();
+  }
+  return c;
+}
+function shadowBlob() {
+  const [c, g] = canvas(128, 128); const gr = g.createRadialGradient(64, 64, 6, 64, 64, 62);
+  gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(.6, 'rgba(0,0,0,.22)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return c;
+}
+
+// ---------- 素材 ----------
+const mats = [];
+const std = o => { const m = new THREE.MeshStandardMaterial(o); mats.push(m); return m; };
+const wallC = wallCanvas(), woodC = woodCanvas(), lockC = woodCanvas('#c9aa80', '120,84,48');
+const tWall = tex(wallC, 1, 1), tWallB = tex(wallC, 1, 1, false);
+const mWall = std({ map: tWall, bumpMap: tWallB, bumpScale: 2.2, roughness: .93 });
+const mPaint = std({ map: tWall, bumpMap: tWallB, bumpScale: 2.2, roughness: .93 });   // 柱・梁
+const mFloor = std({ map: tex(floorCanvas(), W / 4, D / 4), roughness: .5, metalness: 0 });
+const mSlab = std({ map: tex(slabCanvas(), W / 3, D / 3), roughness: .95 });
+const mWhite = std({ color: '#efeeea', roughness: .7 });
+const mWhiteGloss = std({ color: '#f4f4f2', roughness: .28 });
+const mWoodTop = std({ map: tex(woodC, 1, 1), roughness: .42 });   // ウレタン塗装のつや
+const mLock = (() => { const t = tex(lockC, .5, 1); t.rotation = Math.PI / 2; t.center.set(.5, .5); return std({ map: t, roughness: .6 }); })();
+const mLockDoor = std({ color: '#f1f0ec', roughness: .42, metalness: .1 });
+const mBlack = std({ color: '#141414', roughness: .45, metalness: .3 });
+const mBlackSoft = std({ color: '#1a1a1b', roughness: .62 });
+const mMesh = std({ color: '#26282a', roughness: .85, transparent: true, opacity: .86 });
+const mAlu = std({ color: '#c9cbcc', roughness: .28, metalness: 1 });
+const mSus = std({ map: tex(susCanvas(), 3, 2), roughness: .3, metalness: 1 });
+const mChrome = std({ color: '#d8d8d8', roughness: .12, metalness: 1 });
+const mBronze = std({ color: '#2b2622', roughness: .5, metalness: .6 });
+const mGlass = std({ color: '#cfe0e6', roughness: .05, metalness: 0, transparent: true, opacity: .22 });
+const mFabric = std({ color: '#d9d0c0', roughness: .95 });
+const mBench = std({ color: '#b9b2a4', roughness: .95 });
+const mOak = std({ color: '#75462d', roughness: .55 });
+const mLeaf = std({ color: '#3f6b3a', roughness: .7, side: THREE.DoubleSide });
+const mSoil = std({ color: '#3a2f26', roughness: 1 });
+const mMosaic = std({ map: tex(mosaicCanvas(), 1, 1), roughness: .35 });
+const mLampOn = new THREE.MeshBasicMaterial({ color: '#fff7ea' });
+const mScreen = std({ color: '#f6f6f4', roughness: .9 });
+
+// ---------- シーン ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const MOBILE = matchMedia('(pointer:coarse)').matches || innerWidth < 760;   // スマホでは軽くする
+renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .92;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#141516');
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, .05, 80);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = .08; controls.minDistance = .2; controls.maxDistance = 22;
+
+const room = new THREE.Group(); scene.add(room);
+const ceiling = new THREE.Group(); room.add(ceiling);     // 俯瞰のとき隠す
+const tags = [];                                           // 備品名の札
+const add = (m, p = room) => { p.add(m); return m; };
+const sh = (m, cast = true, recv = true) => { m.traverse(o => { if (o.isMesh) { o.castShadow = cast; o.receiveShadow = recv; } }); return m; };
+
+// 直方体（x0〜x1, y0〜y1, z0〜z1 で指定）
+function box(x0, x1, y0, y1, z0, z1, mat, p = room, r = 0) {
+  const g = r ? new RoundedBoxGeometry(x1 - x0, y1 - y0, z1 - z0, 3, r) : new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  if (mat === mPaint) {   // 模様が伸びないよう、面ごとに実寸（3mで1枚）で貼る
+    const w = x1 - x0, h = y1 - y0, d = z1 - z0, uv = g.attributes.uv, o = rnd();
+    [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]].forEach(([a, b], f) => { for (let i = f * 4; i < f * 4 + 4; i++) uv.setXY(i, o + uv.getX(i) * a / 3, o + uv.getY(i) * b / 3); });
+  }
+  const m = new THREE.Mesh(g, mat); m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); m.castShadow = m.receiveShadow = true; return add(m, p);
+}
+// 中心と大きさで指定する直方体（家具の部品用）
+function part(p, w, h, d, mat, x, y, z, r = 0) {
+  const m = new THREE.Mesh(r ? new RoundedBoxGeometry(w, h, d, 3, r) : new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; p.add(m); return m;
+}
+function cyl(p, r, h, mat, x, y, z, seg = 24, r2 = r) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r2, r, h, seg), mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; p.add(m); return m;
+}
+// 壁の面（A→B に進むとき、面は右手側＝室内を向く）。模様がつながるよう通し寸法 s0 を渡す
+function wallQuad(ax, az, bx, bz, y0, y1, s0 = 0, mat = mWall, p = room) {
+  const len = Math.hypot(bx - ax, bz - az), g = new THREE.PlaneGeometry(len, y1 - y0), uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (s0 + uv.getX(i) * len) / 3, (y0 + uv.getY(i) * (y1 - y0)) / 3);
+  const m = new THREE.Mesh(g, mat); m.position.set((ax + bx) / 2, (y0 + y1) / 2, (az + bz) / 2); m.rotation.y = Math.atan2(-(bz - az), bx - ax);
+  m.receiveShadow = true; return add(m, p);
+}
+// 床に落ちる柔らかい影（家具の接地感）
+const tBlob = new THREE.CanvasTexture(shadowBlob());
+function blob(x, z, w, d, o = .9, rot = 0) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: tBlob, transparent: true, opacity: o, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.rotation.z = rot; m.position.set(x, .004, z); m.renderOrder = 1; return add(m);
+}
+const tag = (text, x, y, z) => tags.push({ text, v: new THREE.Vector3(x, y, z) });
+
+// ============================================================
+// 躯体
+// ============================================================
+// 床
+{ const m = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mFloor); m.rotation.x = -Math.PI / 2; m.position.set(W / 2, 0, D / 2); m.receiveShadow = true; add(m); }
+// 天井スラブ
+{ const m = new THREE.Mesh(new THREE.PlaneGeometry(W, D), mSlab); m.rotation.x = Math.PI / 2; m.position.set(W / 2, H, D / 2); add(m, ceiling); }
+
+// 階段側の壁（z=0）：内倒し窓とガラス扉の開口を抜く
+const WIN = { x0: 2.30, x1: 3.25, y0: 1.45, y1: 2.00 }, DOOR = { x0: 3.62, x1: 4.52, y1: 2.05 };
+wallQuad(0, 0, WIN.x0, 0, 0, H, 0);
+wallQuad(WIN.x0, 0, WIN.x1, 0, 0, WIN.y0, WIN.x0); wallQuad(WIN.x0, 0, WIN.x1, 0, WIN.y1, H, WIN.x0);
+wallQuad(WIN.x1, 0, DOOR.x0, 0, 0, H, WIN.x1);
+wallQuad(DOOR.x0, 0, DOOR.x1, 0, DOOR.y1, H, DOOR.x0);
+wallQuad(DOOR.x1, 0, W, 0, 0, H, DOOR.x1);
+// 開口の見込み（壁の厚み）
+function reveal(o, y0, y1) {
+  const t = .22;
+  box(o.x0 - .001, o.x0, y0, y1, -t, 0, mPaint); box(o.x1, o.x1 + .001, y0, y1, -t, 0, mPaint);
+  box(o.x0, o.x1, y1, y1 + .001, -t, 0, mPaint); if (y0 > 0) box(o.x0, o.x1, y0 - .001, y0, -t, 0, mPaint);
+}
+reveal(WIN, WIN.y0, WIN.y1); reveal(DOOR, 0, DOOR.y1);
+// 駐車場側の壁（x=W）、ロッカー側の壁（z=D）、鏡の壁（x=0）
+wallQuad(W, 0, W, D, 0, H, W);
+wallQuad(W, D, 0, D, 0, H, W + D);
+wallQuad(0, D, 0, 0, 0, H, W + D + W);
+
+// 柱型（鏡の両端・扉の横・駐車場側の角）
+box(0, .50, 0, H, 0, .35, mPaint); box(0, .50, 0, H, D - .35, D, mPaint);
+box(3.31, 3.49, 0, H, 0, .12, mPaint);
+box(W - .45, W, 0, H, 0, .35, mPaint);
+// 梁（白塗装）：鏡の上、部屋の中ほど、外周
+box(0, .16, 2.15, H, .35, D - .35, mPaint, ceiling);
+box(3.22, 3.62, 2.17, H, 0, D, mPaint, ceiling);
+box(0, W, 2.20, H, 0, .10, mPaint, ceiling); box(0, 4.3, 2.20, H, D - .10, D, mPaint, ceiling);
+box(W - .10, W, 2.20, H, .35, 3.2, mPaint, ceiling);
+// 配管を通すための床上げ（扉の右）
+box(5.22, 5.56, 0, .10, 0, 1.0, std({ map: mFloor.map, roughness: .6 }));
+
+// ---------- 鏡の壁 ----------
+const MZ0 = .35, MZ1 = D - .35, MY0 = .10, MY1 = 2.15;
+const mirror = new Reflector(new THREE.PlaneGeometry(MZ1 - MZ0, MY1 - MY0), { clipBias: .003, textureWidth: Math.min(2048, innerWidth * devicePixelRatio), textureHeight: Math.min(2048, innerHeight * devicePixelRatio), color: 0x868b87 });
+mirror.rotation.y = Math.PI / 2; mirror.position.set(.012, (MY0 + MY1) / 2, (MZ0 + MZ1) / 2);
+const mirrorG = new THREE.Group(); mirrorG.visible = false; add(mirrorG); mirrorG.add(mirror);
+const whiteWall = box(0, .02, 0, MY1, MZ0, MZ1, std({ color: '#f3f2ee', roughness: .9 }));   // 鏡を外したあとの白壁（プロジェクターを映す面）
+for (let i = 1; i < 5; i++) box(.012, .014, MY0, MY1, MZ0 + (MZ1 - MZ0) * i / 5 - .0015, MZ0 + (MZ1 - MZ0) * i / 5 + .0015, std({ color: '#555b58', roughness: .3 }), mirrorG);   // 鏡5枚の継ぎ目
+box(0, .03, 0, MY0, MZ0, MZ1, std({ color: '#b9b3a8', roughness: .4, metalness: .6 }), mirrorG);   // 下端の金物
+
+// ---------- 内倒し窓（外はガラスブロック） ----------
+{
+  const g = new THREE.Group(); add(g);
+  const w = WIN.x1 - WIN.x0, h = WIN.y1 - WIN.y0, cx = (WIN.x0 + WIN.x1) / 2;
+  for (const [a, b, c, d] of [[WIN.x0, WIN.x1, WIN.y0, WIN.y0 + .03], [WIN.x0, WIN.x1, WIN.y1 - .03, WIN.y1], [WIN.x0, WIN.x0 + .03, WIN.y0, WIN.y1], [WIN.x1 - .03, WIN.x1, WIN.y0, WIN.y1]]) box(a, b, c, d, -.10, -.04, mAlu, g);
+  const sash = new THREE.Group(); sash.position.set(cx, WIN.y0 + .03, -.06); sash.rotation.x = .5; g.add(sash);     // 下を軸に室内へ倒れる
+  part(sash, w - .08, .025, .03, mAlu, 0, 0, 0); part(sash, w - .08, .025, .03, mAlu, 0, h - .08, 0);
+  part(sash, .025, h - .08, .03, mAlu, -(w - .08) / 2, (h - .08) / 2, 0); part(sash, .025, h - .08, .03, mAlu, (w - .08) / 2, (h - .08) / 2, 0);
+  const gl = part(sash, w - .1, h - .1, .006, mGlass, 0, (h - .08) / 2, 0); gl.castShadow = false;
+  const out = new THREE.Mesh(new THREE.PlaneGeometry(w + .5, h + .5), new THREE.MeshBasicMaterial({ map: tex(glassBlockCanvas(), 1, 1), color: '#dfe9f2' }));
+  out.position.set(cx, (WIN.y0 + WIN.y1) / 2, -.45); g.add(out);
+  const day = new THREE.SpotLight('#cfe2f5', 6, 5, .7, .9, 2); day.position.set(cx, 1.75, -.2); day.target.position.set(cx, .6, 2.2); add(day); add(day.target);
+}
+// ---------- ガラス扉（既存のスチール扉） ----------
+{
+  const g = new THREE.Group(); add(g); const z = -.10, w = DOOR.x1 - DOOR.x0;
+  box(DOOR.x0, DOOR.x0 + .05, 0, DOOR.y1, z - .03, z + .03, mBronze, g); box(DOOR.x1 - .05, DOOR.x1, 0, DOOR.y1, z - .03, z + .03, mBronze, g);
+  box(DOOR.x0, DOOR.x1, DOOR.y1 - .05, DOOR.y1, z - .03, z + .03, mBronze, g); box(DOOR.x0, DOOR.x1, 0, .12, z - .02, z + .02, mBronze, g);
+  for (let i = 1; i < 4; i++) box(DOOR.x0 + w * i / 4 - .006, DOOR.x0 + w * i / 4 + .006, .12, DOOR.y1 - .05, z - .008, z + .008, mBronze, g);
+  for (let i = 1; i < 9; i++) box(DOOR.x0 + .05, DOOR.x1 - .05, .12 + 1.88 * i / 9 - .006, .12 + 1.88 * i / 9 + .006, z - .008, z + .008, mBronze, g);
+  const gl = box(DOOR.x0 + .05, DOOR.x1 - .05, .12, DOOR.y1 - .05, z - .003, z + .003, mGlass, g); gl.castShadow = false;
+  box(DOOR.x1 - .16, DOOR.x1 - .13, .75, 1.35, z + .05, z + .08, std({ color: '#8a6a45', roughness: .5 }), g);   // 縦長の木の取っ手
+  const out = new THREE.Mesh(new THREE.PlaneGeometry(w + .6, 2.4), new THREE.MeshBasicMaterial({ color: '#6f8496' })); out.position.set((DOOR.x0 + DOOR.x1) / 2, 1.1, -.9); g.add(out);
+}
+
+// ---------- 曲面のステンレス壁（アーチ開口つき）----------
+const rad = a => a * Math.PI / 180;
+function arcStrip(r, mat, yTop = H) {
+  const N = 88, A0 = -90, A1 = -200, K = 54, HW = 9, hw = r * rad(110 / N * HW);
+  const pos = [], uv = [], idx = [];
+  const lowAt = k => Math.abs(k - K) <= HW ? 1.72 + Math.sqrt(Math.max(0, hw * hw - (r * rad(110 / N * (k - K))) ** 2)) : 0;
+  for (let k = 0; k < N; k++) {
+    const inside = Math.abs(k - K) <= HW && Math.abs(k + 1 - K) <= HW;
+    const pts = [k, k + 1].map(q => { const a = rad(A0 + (A1 - A0) * q / N); return [ARC.cx + r * Math.cos(a), ARC.cz + r * Math.sin(a), inside ? lowAt(q) : 0, r * rad(110 / N * q)]; });
+    const b = pos.length / 3;
+    for (const [x, z, lo, s] of pts) { pos.push(x, lo, z, x, yTop, z); uv.push(s, lo, s, yTop); }
+    idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; return add(m);
+}
+mSus.side = THREE.DoubleSide; arcStrip(ARC.r, mSus);
+arcStrip(ARC.r - .09, std({ color: '#efeeea', roughness: .7, side: THREE.DoubleSide }), 2.4);
+// 洗面スペース：モザイクタイルの床・下がり天井・洗面カウンター・トイレの間仕切り
+{
+  const s = new THREE.Shape(); for (let k = 0; k <= 88; k++) { const a = rad(-90 - 110 * k / 88), x = ARC.cx + (ARC.r - .05) * Math.cos(a), z = ARC.cz + (ARC.r - .05) * Math.sin(a); k ? s.lineTo(x, -z) : s.moveTo(x, -z); } s.lineTo(W, -D);
+  const g = new THREE.ShapeGeometry(s); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / .2, uv.getY(i) / .2);
+  const f = new THREE.Mesh(g, mMosaic); f.rotation.x = -Math.PI / 2; f.position.y = .006; f.receiveShadow = true; add(f);
+  const c = new THREE.Mesh(new THREE.ShapeGeometry(s), mWhite); c.rotation.x = -Math.PI / 2; c.position.y = 2.4; c.material = std({ color: '#efeeea', roughness: .8, side: THREE.BackSide }); add(c, ceiling);
+  // 間仕切り（トイレの入口を抜く）
+  box(4.28, 5.30, 0, 2.4, 4.90, 5.00, mWhite); box(6.02, W, 0, 2.4, 4.90, 5.00, mWhite); box(5.30, 6.02, 2.0, 2.4, 4.90, 5.00, mWhite);
+  // 洗面カウンター（白い収納＋ステンレスの角シンク）
+  box(5.05, W - .02, 0.12, .80, 3.72, 4.17, mWhite); box(5.03, W - .02, .80, .84, 3.70, 4.20, mWhiteGloss);
+  box(5.15, 5.60, .80, .87, 3.76, 4.13, mSus); box(5.19, 5.56, .868, .872, 3.80, 4.09, std({ color: '#6b6e70', metalness: 1, roughness: .3 }));
+  cyl(room, .012, .2, mChrome, 5.37, .95, 3.76); const sp = cyl(room, .01, .14, mChrome, 5.37, 1.04, 3.83); sp.rotation.x = Math.PI / 2;
+  box(5.25, 5.55, 1.25, 1.42, 3.60, 3.66, mSus);                    // ペーパータオル
+  // 便器
+  box(5.45, 5.85, 0, .40, 5.15, 5.70, mWhiteGloss, room, .08); box(5.42, 5.88, .40, .78, 5.62, 5.82, mWhiteGloss, room, .04);
+  const pl = new THREE.PointLight('#fff1dd', 1.6, 4, 2); pl.position.set(5.4, 2.2, 4.4); add(pl);
+  const dl = new THREE.Mesh(new THREE.CircleGeometry(.05, 20), mLampOn); dl.rotation.x = Math.PI / 2; dl.position.set(5.4, 2.395, 4.4); add(dl, ceiling);
+}
+
+// ---------- 露出配管と白いコンセント ----------
+{
+  const pipe = (x0, x1, z, y = .33) => { const m = cyl(room, .011, x1 - x0, mWhite, (x0 + x1) / 2, y, z, 10); m.rotation.z = Math.PI / 2; };
+  pipe(.55, 4.2, D - .02); pipe(.55, 2.2, .02);
+  for (const x of [.8, 2.2, 3.9]) box(x - .035, x + .035, .28, .40, D - .045, D, mWhiteGloss);
+  for (const x of [.8, 1.9]) box(x - .035, x + .035, .28, .40, 0, .045, mWhiteGloss);
+  // 天井エアコンへの配管（白い保温材）
+  const p = cyl(ceiling, .045, 1.2, mWhite, 1.9, 2.60, 5.2, 12); p.rotation.x = Math.PI / 2;
+}
+
+// ---------- 天井カセットエアコン ----------
+{
+  const g = new THREE.Group(); g.position.set(1.9, 0, 4.3); ceiling.add(g);
+  part(g, .84, .27, .84, std({ color: '#3a3c3e', roughness: .6, metalness: .4 }), 0, 2.50, 0);
+  part(g, .95, .035, .95, mWhiteGloss, 0, 2.35, 0);
+  for (const [w, d, x, z] of [[.6, .05, 0, .4], [.6, .05, 0, -.4], [.05, .6, .4, 0], [.05, .6, -.4, 0]]) part(g, w, .005, d, mBlack, x, 2.331, z);
+  part(g, .5, .004, .5, std({ color: '#e4e4e0', roughness: .6 }), 0, 2.331, 0);
+  for (const [x, z] of [[.4, .4], [-.4, .4], [.4, -.4], [-.4, -.4]]) cyl(g, .006, .2, mAlu, x, 2.58, z, 6);
+}
+
+// ---------- ライティングレールとスポットライト ----------
+const spots = [];
+function rail(x, z0, z1, zs) {
+  box(x - .017, x + .017, 2.50, 2.52, z0, z1, mWhite, ceiling);
+  for (let z = z0 + .3; z < z1; z += 1.2) cyl(ceiling, .004, H - 2.52, mWhite, x, (H + 2.52) / 2, z, 6);
+  for (const z of zs) {
+    const g = new THREE.Group(); g.position.set(x, 2.5, z); ceiling.add(g);
+    cyl(g, .012, .05, mWhite, 0, -.025, 0, 10);
+    const head = new THREE.Group(); head.position.y = -.06; head.rotation.set(rr(-.35, .35), 0, rr(-.35, .35)); g.add(head);
+    cyl(head, .036, .12, mWhite, 0, -.06, 0, 20);
+    const d = new THREE.Mesh(new THREE.CircleGeometry(.03, 20), mLampOn); d.rotation.x = Math.PI / 2; d.position.y = -.1205; head.add(d);
+    const dir = new THREE.Vector3(0, -1, 0).applyEuler(head.rotation);
+    const L = new THREE.SpotLight('#fff8ef', 24, 9, .78, .9, 2);
+    L.position.set(x, 2.38, z); L.target.position.set(x + dir.x * 2.4, 2.38 + dir.y * 2.4, z + dir.z * 2.4); add(L); add(L.target); spots.push(L);
+  }
+}
+rail(1.15, .5, 5.5, [.9, 2.0, 3.0, 4.0, 5.0]);
+rail(2.45, .5, 5.5, [.9, 2.0, 3.1, 4.1, 5.0]);
+rail(4.65, .4, 3.7, [.9, 1.9, 2.9]);
+// 影を落とすのは数灯だけ（重くなりすぎないように）
+for (const i of (MOBILE ? [3, 8] : [1, 3, 6, 8, 11])) { const L = spots[i]; L.castShadow = true; L.shadow.mapSize.set(MOBILE ? 512 : 1024, MOBILE ? 512 : 1024); L.shadow.bias = -.0006; L.shadow.normalBias = .02; L.shadow.camera.near = .2; L.shadow.camera.far = 8; }
+scene.add(new THREE.HemisphereLight('#cfcecb', '#ffffff', .85));   // 天井の色と、白い床からの照り返し
+
+// ============================================================
+// 備品
+// ============================================================
+// 5本脚のベース（キャスター付き）
+function starBase(g, mat, colH) {
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2, arm = part(g, .30, .022, .045, mat, Math.cos(a) * .15, .085, Math.sin(a) * .15); arm.rotation.y = -a;
+    const c = new THREE.Mesh(new THREE.SphereGeometry(.027, 12, 8), mBlackSoft); c.position.set(Math.cos(a) * .29, .03, Math.sin(a) * .29); c.castShadow = true; g.add(c);
+  }
+  cyl(g, .028, colH - .09, mat === mAlu ? mChrome : mBlack, 0, (colH + .09) / 2, 0, 14);
+}
+// テーブル用チェア：黒いリブパッド＋アルミフレームのミーティングチェア（6脚・発注済の商品を想定した形）
+function meetingChair() {
+  const g = new THREE.Group(); starBase(g, mAlu, .43);
+  part(g, .5, .045, .46, mBlackSoft, 0, .455, .01, .02);
+  for (let i = 0; i < 5; i++) part(g, .47, .03, .07, mBlackSoft, 0, .475, -.16 + i * .085, .014);
+  const back = new THREE.Group(); back.position.set(0, .47, -.22); back.rotation.x = -.2; g.add(back);
+  part(back, .49, .46, .035, mBlackSoft, 0, .25, 0, .016);
+  for (let i = 0; i < 5; i++) part(back, .46, .07, .03, mBlackSoft, 0, .07 + i * .088, .016, .013);
+  for (const s of [-1, 1]) {
+    part(g, .018, .03, .5, mAlu, s * .255, .455, .0); part(back, .018, .5, .03, mAlu, s * .255, .25, 0);
+    part(g, .03, .02, .26, mAlu, s * .285, .665, -.06, .008); part(g, .018, .2, .022, mAlu, s * .285, .56, .06); part(g, .018, .2, .022, mAlu, s * .285, .56, -.18);
+    part(g, .05, .016, .2, mBlackSoft, s * .285, .682, -.06, .007);
+  }
+  return sh(g);
+}
+// アーロンチェア風（メッシュの座と背・黒いフレーム）
+function aeron() {
+  const g = new THREE.Group(); starBase(g, mBlack, .42);
+  part(g, .16, .1, .2, mBlack, 0, .40, -.02, .03);
+  part(g, .52, .035, .48, mMesh, 0, .475, .02, .016);
+  for (const s of [-1, 1]) part(g, .03, .05, .48, mBlack, s * .255, .47, .02, .012);
+  part(g, .52, .04, .03, mBlack, 0, .468, .255, .012);
+  const back = new THREE.Group(); back.position.set(0, .50, -.23); back.rotation.x = -.16; g.add(back);
+  part(back, .50, .60, .018, mMesh, 0, .33, 0, .008);
+  for (const s of [-1, 1]) part(back, .035, .62, .04, mBlack, s * .245, .33, 0, .014);
+  part(back, .52, .04, .04, mBlack, 0, .64, 0, .016); part(back, .46, .035, .04, mBlack, 0, .03, 0, .014);
+  part(back, .07, .5, .05, mBlack, 0, .22, -.05, .02); part(back, .3, .07, .04, mBlack, 0, .18, -.035, .02);
+  for (const s of [-1, 1]) { part(g, .03, .22, .04, mBlack, s * .30, .58, -.06, .01); part(g, .085, .03, .27, mBlackSoft, s * .30, .70, -.02, .013); }
+  return sh(g);
+}
+const place = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; add(o); blob(x, z, .85, .85, .75); return o; };
+
+// 天板＋黒スチールの脚（KANADEMONO）。長辺を x 方向に置く
+function steelTable(x0, x1, z0, z1, h = .72) {
+  const g = new THREE.Group(); add(g);
+  const top = box(x0, x1, h - .03, h, z0, z1, mWoodTop.clone(), g); mats.push(top.material);
+  top.material.map = tex(woodC, (x1 - x0) / 1.6, (z1 - z0) / .8);
+  for (const x of [x0 + .16, x1 - .16]) {
+    box(x - .03, x + .03, 0, h - .03, z0 + .06, z0 + .072, mBlack, g); box(x - .03, x + .03, 0, h - .03, z1 - .072, z1 - .06, mBlack, g);
+    box(x - .03, x + .03, h - .042, h - .03, z0 + .06, z1 - .06, mBlack, g); box(x - .03, x + .03, 0, .012, z0 + .06, z1 - .06, mBlack, g);
+  }
+  box(x0 + .16, x1 - .16, h - .09, h - .03, (z0 + z1) / 2 - .02, (z0 + z1) / 2 + .02, mBlack, g);   // 幕板
+  blob((x0 + x1) / 2, (z0 + z1) / 2, (x1 - x0) * 1.25, (z1 - z0) * 1.5, .8);
+  return g;
+}
+// 会議テーブル 2700×1000（発注済）と配線孔
+const T = { x0: 1.27, x1: 3.97, z0: 2.04, z1: 3.04 };
+steelTable(T.x0, T.x1, T.z0, T.z1);
+{ const x = (T.x0 + T.x1) / 2, h = .72, z0 = T.z0, z1 = T.z1;
+  box(x - .03, x + .03, 0, h - .03, z0 + .06, z0 + .072, mBlack); box(x - .03, x + .03, 0, h - .03, z1 - .072, z1 - .06, mBlack);
+  box(x - .03, x + .03, h - .042, h - .03, z0 + .06, z1 - .06, mBlack); box(x - .03, x + .03, 0, .012, z0 + .06, z1 - .06, mBlack);
+  for (const cx of [1.95, 3.29]) { box(cx - .15, cx + .15, .72, .7215, 2.49, 2.59, mBlack); box(cx - .145, cx + .145, .72, .7225, 2.497, 2.583, mOak); } }
+for (const x of [1.82, 2.62, 3.42]) { place(meetingChair(), x, T.z0 - .22, 0); place(meetingChair(), x, T.z1 + .22, Math.PI); }
+// デスク 1400×700（発注済）＋デスクチェア
+steelTable(1.94, 3.34, .03, .73);
+place(aeron(), 2.64, 1.02, Math.PI);
+// ローカウンター（造作・監視モニター）＋アーロンチェア3脚
+{
+  const z0 = 1.06, z1 = 3.12, x0 = W - .45;
+  const top = box(x0, W, .68, .72, z0, z1, mWoodTop.clone()); top.material.map = (() => { const t = tex(woodC, 1.7, .6); t.rotation = Math.PI / 2; t.center.set(.5, .5); return t; })(); mats.push(top.material);
+  for (const z of [z0, (z0 + z1) / 2 - .015, z1 - .03]) box(x0 + .03, W, 0, .68, z, z + .03, mOak);
+  box(W - .03, W - .01, .3, .68, z0, z1, mOak);
+  blob(x0 + .2, (z0 + z1) / 2, .9, 3.2, .7);
+  [1.42, 2.09, 2.76].forEach((z, i) => {
+    cyl(room, .11, .012, mBlack, W - .16, .726, z, 20); box(W - .17, W - .15, .73, .98, z - .02, z + .02, mBlack);
+    box(W - .155, W - .13, .83, 1.17, z - .30, z + .30, mBlack, room, .008);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(.57, .32), new THREE.MeshBasicMaterial({ map: tex(monitorCanvas(i), 1, 1), color: '#b8b8b8' })); scr.rotation.y = -Math.PI / 2; scr.position.set(W - .156, 1.0, z); add(scr);
+    box(W - .40, W - .27, .72, .735, z - .21, z + .21, std({ color: '#e9e9e6', roughness: .5 }), room, .005);   // キーボード
+    place(aeron(), W - .80, z, Math.PI / 2);
+  });
+}
+// ロッカー：白・8人用（4列2段）×3（W900×D450×H1800）
+function locker(x) {
+  const g = new THREE.Group(); g.position.set(x, 0, D - .455); add(g);
+  part(g, .9, 1.74, .45, std({ color: '#e3e0d9', roughness: .5, metalness: .2 }), .45, .93, .225);
+  part(g, .86, .06, .40, mBlack, .45, .03, .23);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 2; r++) {   // 4列×2段の縦長扉
+    const dx = .008 + c * .2215 + .1107, dy = .065 + r * .868 + .431;
+    part(g, .2135, .858, .016, mLockDoor, dx, dy, -.006);
+    cyl(g, .011, .012, mAlu, dx + .075, dy, -.018, 12).rotation.x = Math.PI / 2;
+    part(g, .07, .03, .004, std({ color: '#cfd0cf', roughness: .4, metalness: .6 }), dx, dy + .33, -.016);
+    for (let k = 0; k < 3; k++) part(g, .09, .006, .004, mBlack, dx, dy - .34 + k * .016, -.015);
+  }
+  return sh(g);
+}
+[1.01, 1.915, 2.82].forEach(locker); blob(2.36, D - .3, 3.2, 1.1, .8);
+// 冷蔵庫（黒）＋電子レンジ：入って左の奥の角。扉は部屋のほうを向く
+{
+  const g = new THREE.Group(); g.position.set(W - .33, 0, .70); g.rotation.y = -Math.PI / 2; add(g);
+  const x0 = -.30, x1 = .30, z0 = -.32, z1 = .32, mF = std({ color: '#1a1b1d', roughness: .3, metalness: .35 });
+  box(x0, x1, .02, 1.22, z0, z1 - .03, mF, g, .015);
+  box(x0 + .003, x1 - .003, .03, .45, z1 - .03, z1, mF, g, .012); box(x0 + .003, x1 - .003, .465, 1.215, z1 - .03, z1, mF, g, .012);
+  box(x1 - .07, x1 - .045, .22, .40, z1, z1 + .02, mAlu, g); box(x1 - .07, x1 - .045, .55, .85, z1, z1 + .02, mAlu, g);
+  box(x0 + .07, x1 - .07, 1.23, 1.51, -.20, .18, mWhiteGloss, g, .012);                                    // 電子レンジ
+  box(x0 + .09, x1 - .22, 1.26, 1.48, .18, .183, std({ color: '#1d1f21', roughness: .15 }), g); box(x1 - .19, x1 - .09, 1.27, 1.47, .18, .183, std({ color: '#d5d5d2', roughness: .4 }), g);
+  blob(W - .4, .70, 1.1, 1.0, .8);
+}
+// ベンチ：KANADEMONO THE BENCH（ラバーウッド × Black Steel Line）幅1500×奥行300。板座のみ
+steelTable(1.67, 3.17, 4.18, 4.48, .43);
+// 棚：入って右の壁の奥（デスクの先）。黒スチールの枠＋テーブルと同じ板
+{
+  const x0 = .62, x1 = 1.92, z0 = .03, z1 = .41, g = new THREE.Group(); add(g);
+  for (const x of [x0, x1 - .025]) for (const z of [z0, z1 - .025]) box(x, x + .025, 0, 1.80, z, z + .025, mBlack, g);
+  for (const y of [.12, .54, .96, 1.38, 1.78]) { const b = box(x0, x1, y, y + .03, z0, z1, mWoodTop.clone(), g); b.material.map = tex(woodC, .8, .25); mats.push(b.material); }
+  box(x0, x1, 1.0, 1.02, z0, z0 + .012, mBlack, g);
+  // 置いてあるもの（白い収納ボックス・ファイル・小さな鉢）は仮
+  for (const [a, y] of [[.68, .15], [1.02, .15], [1.36, .15], [.68, .57], [1.02, .57]]) box(a, a + .30, y, y + .26, z0 + .04, z1 - .03, mWhite, g, .012);
+  let fx = 1.40; for (let k = 0; k < 9; k++) { const w = rr(.03, .055); box(fx, fx + w, .57, .57 + rr(.26, .31), z0 + .06, z1 - .06, std({ color: ['#2c2e30', '#e9e7e1', '#8c6540', '#4b5648'][k % 4], roughness: .7 }), g); fx += w + .004; }
+  fx = .70; for (let k = 0; k < 12; k++) { const w = rr(.025, .05); box(fx, fx + w, .99, .99 + rr(.22, .3), z0 + .08, z1 - .06, std({ color: ['#e9e7e1', '#2c2e30', '#b9b2a4'][k % 3], roughness: .7 }), g); fx += w + .004; }
+  cyl(g, .07, .12, mWhite, 1.62, 1.05, .22, 20, .085); for (let k = 0; k < 14; k++) { const l = part(g, .012, .2, .03, mLeaf, 1.62, 1.2, .22); l.rotation.set(rr(-.7, .7), rr(0, 6), rr(-.7, .7)); }
+  box(.75, 1.15, 1.41, 1.63, z0 + .05, z1 - .05, mWhite, g, .012); box(1.3, 1.75, 1.41, 1.56, z0 + .05, z1 - .05, std({ color: '#b9b2a4', roughness: .9 }), g, .012);
+  blob(1.27, .3, 1.8, .9, .8);
+}
+// ラグ：会議テーブルの下（3.6m×2.6m・毛足の短い織り）
+{
+  const [c, x] = canvas(512, 512); x.fillStyle = '#b8a88c'; x.fillRect(0, 0, 512, 512);
+  for (let y = 0; y < 512; y += 3) { x.fillStyle = `rgba(${rnd() < .5 ? '110,95,70' : '235,225,205'},${rr(.04,.12)})`; x.fillRect(0, y, 512, 2); }
+  for (let q = 0; q < 512; q += 4) { x.fillStyle = `rgba(110,95,70,${rr(.02,.08)})`; x.fillRect(q, 0, 1.5, 512); }
+  grain(x, 512, 512, 10);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.6), std({ map: tex(c, 6, 4.4), roughness: 1 }));
+  m.rotation.x = -Math.PI / 2; m.position.set(2.62, .0032, 2.55); m.receiveShadow = true; add(m);
+  const e = new THREE.Mesh(new THREE.PlaneGeometry(3.66, 2.66), new THREE.MeshBasicMaterial({ color: '#000', transparent: true, opacity: .18, depthWrite: false })); e.rotation.x = -Math.PI / 2; e.position.set(2.63, .0026, 2.56); add(e);
+}
+// プランター（観葉植物）
+function plant(x, z, s = 1) {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); add(g);
+  cyl(g, .15, .40, mWhite, 0, .20, 0, 28, .19); cyl(g, .17, .01, mSoil, 0, .385, 0, 20);
+  cyl(g, .022, .5, std({ color: '#6b5a44', roughness: .9 }), 0, .63, 0, 8, .016);
+  const lg = new THREE.PlaneGeometry(.075, .62, 1, 5); lg.translate(0, .31, 0);
+  const p = lg.attributes.position; for (let i = 0; i < p.count; i++) { const y = p.getY(i); p.setX(i, p.getX(i) * (1 - (y / .62) ** 2 * .9)); p.setZ(i, y * y * .75); } lg.computeVertexNormals();
+  for (let i = 0; i < 46; i++) { const l = new THREE.Mesh(lg, mLeaf); const pv = new THREE.Group(); pv.position.y = .78 + rr(0, .14); pv.rotation.y = rr(0, 6.28); l.rotation.x = rr(.05, 1.25); l.scale.setScalar(rr(.7, 1.15)); l.castShadow = true; pv.add(l); g.add(pv); }
+  blob(x, z, .9 * s, .9 * s, .8);
+}
+plant(.50, .80, 1.0); plant(.48, 5.18, .95);
+// プロジェクタースクリーン 80インチ（鏡の前に降りる）
+const screen = new THREE.Group(); add(screen);
+box(.17, .26, 2.06, 2.15, 1.55, 3.55, mWhite, screen);
+{
+  const w = 1.771, h = .996, zc = 2.55, top = 2.06;
+  const s1 = box(.212, .216, top - h - .12, top, zc - w / 2 - .03, zc + w / 2 + .03, std({ color: '#161616', roughness: .9 }), screen); s1.castShadow = true;
+  const s2 = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mScreen); s2.rotation.y = Math.PI / 2; s2.position.set(.2175, top - .09 - h / 2, zc); screen.add(s2);
+  cyl(screen, .016, w + .08, mWhite, .214, top - h - .13, zc, 12).rotation.x = Math.PI / 2;
+}
+screen.visible = false;
+// 山崎実業・白系でそろえる小物（仮置き）
+cyl(room, .11, .42, mWhite, 3.52, .21, .36, 24, .13); blob(3.52, .36, .5, .5, .7);                          // ゴミ箱
+box(2.02, 2.26, .72, .80, .12, .25, mWhite, room, .01);                                                     // ティッシュケース
+box(2.95, 3.20, .72, .735, .30, .48, std({ color: '#2a2c2e', roughness: .4, metalness: .5 }));              // ノートPC
+{ const m = box(2.95, 3.20, .735, .90, .30, .305, std({ color: '#2a2c2e', roughness: .4, metalness: .5 })); m.rotation.x = .18; }
+
+// 備品名の札
+tag('会議テーブル 2700×1000（購入済）', 2.62, .95, 2.54); tag('ミーティングチェア ×6（組立済）', 1.82, 1.15, 1.75);
+tag('デスク 1400×700（購入済）', 2.64, .95, .38); tag('冷蔵庫・黒（設置済）＋電子レンジ（予定）', W - .35, 1.65, .7);
+tag('ロッカー 8人用 ×3（納品済・組立前）', 2.36, 1.95, D - .3); tag('ローカウンター（造作）＋モニター ×3（未購入）', W - .25, 1.35, 2.09);
+tag('アーロンチェア ×3', W - .8, 1.2, 2.76); tag('ベンチ 1500×300（KANADEMONO 候補）', 2.42, .7, 4.33); tag('棚（テーブルと同じ板）', 1.27, 1.95, .25); tag('ラグ ベージュ 3.6×2.6m（提案）', 1.2, .15, 3.6);
+tag('プランター', .5, 1.6, .8); tag('白壁（鏡は撤去予定・投影面）', .05, 1.9, 2.9);
+tag('洗面・トイレ（既存）', 4.5, 2.25, 4.4);
+
+// ============================================================
+// 仕上げ：室内の反射（間接光のかわり）、視点、操作
+// ============================================================
+function bakeEnv() {
+  const rt = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(.05, 30, rt);
+  cc.position.set(2.6, 1.3, 3.0); mirror.visible = false; const bg = scene.background; scene.background = new THREE.Color('#000');
+  const pm = new THREE.PMREMGenerator(renderer);
+  for (let i = 0; i < 2; i++) { cc.update(renderer, scene); scene.environment = pm.fromCubemap(rt.texture).texture; }
+  mirror.visible = true; scene.background = bg;
+}
+for (const m of mats) m.envMapIntensity = m.metalness > .5 ? 1.0 : .3;
+
+const VIEWS = [
+  ['入口から', [4.25, 1.55, .55], [1.6, .95, 3.7]],
+  ['白壁に向かって', [5.0, 1.55, 1.25], [.1, 1.05, 3.5]],
+  ['ロッカー側から', [.85, 1.5, 5.0], [4.0, .95, 1.3]],
+  ['モニター席', [3.6, 1.45, 2.6], [W, .85, 1.5]],
+  ['洗面のアーチ', [2.75, 1.5, 3.75], [5.3, 1.1, 4.75]],
+  ['俯瞰', [W / 2 + .6, 7.4, D / 2 + 3.4], [W / 2, .4, D / 2]],
+];
+let goal = null;
+function setView(i, instant) {
+  const [, p, t] = VIEWS[i]; ceiling.visible = i !== 5;
+  goal = { p: new THREE.Vector3(...p), t: new THREE.Vector3(...t), k: instant ? 1 : 0 };
+  [...document.querySelectorAll('#views button')].forEach((b, j) => b.classList.toggle('on', j === i));
+}
+VIEWS.forEach(([n], i) => { const b = document.createElement('button'); b.textContent = n; b.onclick = () => setView(i); document.getElementById('views').appendChild(b); });
+controls.addEventListener('start', () => { goal = null; });
+
+if (MOBILE) document.getElementById('hint').textContent = '1本指で見回す ／ 2本指でつまんで寄る・ずらして移動';
+const tagBox = document.getElementById('tags'); let showTags = false;
+const tagEls = tags.map(t => { const d = document.createElement('div'); d.className = 'tag'; d.textContent = t.text; d.style.display = 'none'; tagBox.appendChild(d); return d; });
+const bScreen = document.getElementById('bScreen'), bTags = document.getElementById('bTags'), bList = document.getElementById('bList'), list = document.getElementById('list');
+bScreen.onclick = () => { mirrorG.visible = !mirrorG.visible; whiteWall.visible = !mirrorG.visible; bScreen.classList.toggle('on', mirrorG.visible); };
+bTags.onclick = () => { showTags = !showTags; bTags.classList.toggle('on', showTags); };
+bList.onclick = () => { const on = list.style.display !== 'block'; list.style.display = on ? 'block' : 'none'; bList.classList.toggle('on', on); };
+list.innerHTML = '<h2>B1F の備品と根拠（LINE 11/12 時点）</h2><table>' + [
+  ['会議テーブル W2700×D1000 H720<br>KANADEMONO THE TABLE ラバーウッド ブラウン × Black Steel（配線トレー付き）。天板は11/7着、脚は11/9着予定', '購入済', 1],
+  ['デスク W1400×D700 H720<br>KANADEMONO THE TABLE ラバーウッド ブラウン × Black Steel', '購入済', 1],
+  ['ミーティングチェア ×6 黒<br>11/7に組立完了。形は商品写真を見ておらず推定', '組立済', 1],
+  ['ロッカー 白 8人用（4列2段）×3<br>11/7納品、11/15に組立予定', '納品済', 1],
+  ['冷蔵庫 黒<br>入って左の奥の角、部屋向き。機種は未確認のため一般的な形', '設置済', 1],
+  ['電子レンジ<br>冷蔵庫の上に置く予定（追って購入）', '予定', 2],
+  ['アーロンチェア ×3<br>ローカウンター用', '選定済', 2],
+  ['ローカウンター<br>造作。棚・ベンチとあわせて同じラバーウッド ブラウンの色に統一', '造作', 2],
+  ['モニター ×3（ローカウンター用）<br>これから購入。画面は24インチ相当で仮置き', '未購入', 3],
+  ['プロジェクター<br>候補は XGIMI HORIZON 20 / 20 Max。鏡を外した白壁に映す想定。未決定のため未配置', '検討中', 3],
+  ['棚 W1300×D380×H1800<br>入って右の壁の奥。黒スチール枠＋テーブルと同じ板。寸法は仮', '予定', 2],
+  ['ラグ ベージュ 3.6×2.6m<br>会議テーブルの下。サイズは提案', '提案', 3],
+  ['ベンチ W1500×D300<br>KANADEMONO THE BENCH（BNC-K11-LN）を想定。高さは未確認で43cmと仮定', '候補', 2],
+  ['デスクチェア ×1／プランター ×2', '未選定・仮', 3],
+  ['鍵付きの書類保管棚<br>ロッカーと合わせたい意向。未決定のため未配置', '検討中', 3],
+  ['ゴミ箱・傘立て・ティッシュケース<br>ゴミ箱・ティッシュケースは白系の仮置き。土足運用なので下駄箱なし', '仮置き', 3],
+  ['鏡 → 白壁<br>鏡はすべて外して白壁にする予定。「鏡あり（現状）」で切替', '予定', 2],
+  ['ステンレス曲面壁・洗面・照明・エアコン<br>現地写真のとおり既存を再現', '既存', 3],
+].map(([a, b, c]) => `<tr><td>${a}</td><td class="st${c}">${b}</td></tr>`).join('') + '</table>';
+
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+const v = new THREE.Vector3();
+function loop() {
+  requestAnimationFrame(loop);
+  if (goal) { goal.k = Math.min(1, goal.k + .04); const e = goal.k >= 1 ? 1 : .12; camera.position.lerp(goal.p, e); controls.target.lerp(goal.t, e); if (goal.k >= 1) goal = null; }
+  controls.update(); renderer.render(scene, camera);
+  tags.forEach((t, i) => {
+    const el = tagEls[i]; v.copy(t.v).project(camera);
+    const ok = showTags && v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1;
+    el.style.display = ok ? 'block' : 'none';
+    if (ok) { el.style.left = (v.x * .5 + .5) * innerWidth + 'px'; el.style.top = (-v.y * .5 + .5) * innerHeight + 'px'; }
+  });
+}
+setView(0, true); controls.update(); renderer.render(scene, camera);
+bakeEnv();
+document.getElementById('load').remove();
+window.__b1 = { camera, controls, setView, renderer, scene, spots, mats, mirror, ceiling };
+loop();
+</script>
+</body>
+</html>
