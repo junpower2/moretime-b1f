@@ -20,6 +20,8 @@
   #list table { border-collapse:collapse; width:100%; }
   #list td { padding:4px 0; border-top:1px solid rgba(255,255,255,.1); vertical-align:top; }
   #list td:last-child { text-align:right; white-space:nowrap; padding-left:8px; }
+  #list .note { opacity:.65; font-size:10.5px; margin:0 0 6px; }
+  #list tr.go { cursor:pointer; } #list tr.go:hover td { background:rgba(255,255,255,.08); } #list tr.sel td { background:rgba(255,255,255,.14); }
   .st1 { color:#9fd6a4; } .st2 { color:#e6cf8a; } .st3 { color:#b3aea5; }
   .tag { position:fixed; transform:translate(-50%,-100%); background:rgba(20,21,22,.82); border:1px solid rgba(255,255,255,.2); border-radius:6px; padding:2px 7px; font-size:11px; white-space:nowrap; pointer-events:none; }
   #load { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#141516; font-size:13px; color:#a9a49b; }
@@ -216,7 +218,7 @@ const mLock = (() => { const t = tex(lockC, .5, 1); t.rotation = Math.PI / 2; t.
 const mLockDoor = std({ color: '#f1f0ec', roughness: .42, metalness: .1 });
 const mBlack = std({ color: '#141414', roughness: .45, metalness: .3 });
 const mBlackSoft = std({ color: '#1a1a1b', roughness: .62 });
-const mMesh = std({ color: '#26282a', roughness: .85, transparent: true, opacity: .86 });
+const mMesh = std({ color: '#26282a', roughness: .85, transparent: true, opacity: .86, side: THREE.DoubleSide });
 const mAlu = std({ color: '#c9cbcc', roughness: .28, metalness: 1 });
 const mSus = std({ map: tex(susCanvas(), 3, 2), roughness: .3, metalness: 1 });
 const mChrome = std({ color: '#d8d8d8', roughness: .12, metalness: 1 });
@@ -446,34 +448,73 @@ function starBase(g, mat, colH) {
   }
   cyl(g, .028, colH - .09, mat === mAlu ? mChrome : mBlack, 0, (colH + .09) / 2, 0, 14);
 }
-// テーブル用チェア：黒いリブパッド＋アルミフレームのミーティングチェア（6脚・発注済の商品を想定した形）
-function meetingChair() {
-  const g = new THREE.Group(); starBase(g, mAlu, .43);
-  part(g, .5, .045, .46, mBlackSoft, 0, .455, .01, .02);
-  for (let i = 0; i < 5; i++) part(g, .47, .03, .07, mBlackSoft, 0, .475, -.16 + i * .085, .014);
-  const back = new THREE.Group(); back.position.set(0, .47, -.22); back.rotation.x = -.2; g.add(back);
-  part(back, .49, .46, .035, mBlackSoft, 0, .25, 0, .016);
-  for (let i = 0; i < 5; i++) part(back, .46, .07, .03, mBlackSoft, 0, .07 + i * .088, .016, .013);
-  for (const s of [-1, 1]) {
-    part(g, .018, .03, .5, mAlu, s * .255, .455, .0); part(back, .018, .5, .03, mAlu, s * .255, .25, 0);
-    part(g, .03, .02, .26, mAlu, s * .285, .665, -.06, .008); part(g, .018, .2, .022, mAlu, s * .285, .56, .06); part(g, .018, .2, .022, mAlu, s * .285, .56, -.18);
-    part(g, .05, .016, .2, mBlackSoft, s * .285, .682, -.06, .007);
+// 黒い5本脚（中心から先へ少し下がる脚＋キャスター）。COX とアーロンで共用
+function blackBase(g, colTop, r = .30, mat = mBlack) {
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2, leg = new THREE.Group(); leg.rotation.y = -a; g.add(leg);
+    const arm = part(leg, r, .028, .042, mat, r / 2 + .01, .105, 0, .01); arm.rotation.z = -.17;
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(.027, .027, .03, 14), mBlackSoft); c.rotation.x = Math.PI / 2; c.position.set(r + .005, .03, 0); c.castShadow = true; leg.add(c);
+    part(leg, .02, .04, .02, mat, r + .005, .068, 0);
   }
+  cyl(g, .04, .05, mat, 0, .135, 0, 16); cyl(g, .026, colTop - .15, mat, 0, (colTop + .15) / 2, 0, 14);
+}
+// 細い丸棒（フレーム用）。2点を結ぶ
+function rod(g, a, b, r = .007, mat = mBlack) {
+  const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, va.distanceTo(vb), 8), mat);
+  m.position.copy(va).add(vb).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize()); m.castShadow = true; g.add(m); return m;
+}
+// テーブル用チェア：Knot antiques「COX DESK CHAIR」（PU・黒）。LINE 10月のリンク（flymee #112958）の商品。6脚購入・組立済み
+// 四角い背と座に横のステッチ、細い黒スチールのフレーム、小さな肘パッド、黒い5本脚。座面有効 幅48×奥行46cm、座面高44.5〜54cm
+const mPU = std({ color: '#1b1b1c', roughness: .5 });
+function meetingChair() {
+  const g = new THREE.Group(); blackBase(g, .40, .28);
+  part(g, .20, .03, .20, mBlack, 0, .405, 0, .008);                                          // 座の下の金具
+  const sy = .455;                                                                            // 座クッションの中心の高さ
+  for (let i = 0; i < 4; i++) part(g, .48, .085, .112, mPU, 0, sy, -.171 + i * .114, .028);   // 座：前後4本の畝（横ステッチ）
+  part(g, .47, .05, .44, mPU, 0, sy - .012, 0, .02);
+  const back = new THREE.Group(); back.position.set(0, .60, -.235); back.rotation.x = -.10; g.add(back);
+  for (let i = 0; i < 4; i++) part(back, .46, .078, .07, mPU, 0, .045 + i * .08, 0, .026);    // 背：上下4本の畝
+  part(back, .45, .30, .04, mPU, 0, .165, -.008, .016);
+  for (const s of [-1, 1]) {
+    const x = s * .262;
+    rod(g, [x, .42, .17], [x, .705, .17]);                         // 前の縦棒
+    rod(g, [x, .705, .17], [x, .705, -.25]);                       // 肘の横棒
+    rod(g, [x, .42, -.25], [x, .93, -.292]);                       // 後ろの縦棒（背を支える）
+    rod(g, [x, .42, .17], [x, .42, -.25]);                         // 座の横の下棒
+    part(g, .045, .022, .21, mPU, x, .722, -.02, .009);            // 肘パッド
+    rod(g, [x, .76, -.276], [s * .225, .76, -.262], .006);         // 背パッドへの取付
+  }
+  rod(g, [-.262, .42, .17], [.262, .42, .17]); rod(g, [-.262, .42, -.25], [.262, .42, -.25]);
   return sh(g);
 }
-// アーロンチェア風（メッシュの座と背・黒いフレーム）
+// アーロンチェア（ハーマンミラー・グラファイト）。上が広く腰で絞った背のメッシュ、枠だけの座、背から伸びる肘、背骨のような支柱とランバーパッド
 function aeron() {
-  const g = new THREE.Group(); starBase(g, mBlack, .42);
-  part(g, .16, .1, .2, mBlack, 0, .40, -.02, .03);
-  part(g, .52, .035, .48, mMesh, 0, .475, .02, .016);
-  for (const s of [-1, 1]) part(g, .03, .05, .48, mBlack, s * .255, .47, .02, .012);
-  part(g, .52, .04, .03, mBlack, 0, .468, .255, .012);
-  const back = new THREE.Group(); back.position.set(0, .50, -.23); back.rotation.x = -.16; g.add(back);
-  part(back, .50, .60, .018, mMesh, 0, .33, 0, .008);
-  for (const s of [-1, 1]) part(back, .035, .62, .04, mBlack, s * .245, .33, 0, .014);
-  part(back, .52, .04, .04, mBlack, 0, .64, 0, .016); part(back, .46, .035, .04, mBlack, 0, .03, 0, .014);
-  part(back, .07, .5, .05, mBlack, 0, .22, -.05, .02); part(back, .3, .07, .04, mBlack, 0, .18, -.035, .02);
-  for (const s of [-1, 1]) { part(g, .03, .22, .04, mBlack, s * .30, .58, -.06, .01); part(g, .085, .03, .27, mBlackSoft, s * .30, .70, -.02, .013); }
+  const g = new THREE.Group(); blackBase(g, .40, .31, mBlackSoft);
+  part(g, .17, .09, .24, mBlackSoft, 0, .40, -.03, .03);                                      // チルト機構
+  // 座：枠＋メッシュ。前の縁は丸く落ちる
+  const seat = new THREE.Group(); seat.position.set(0, .475, .02); g.add(seat);
+  { const sp = new THREE.Shape(), w = .255, d0 = -.21, d1 = .23, rr2 = .07;
+    sp.moveTo(-w + rr2, d0); sp.lineTo(w - rr2, d0); sp.quadraticCurveTo(w, d0, w, d0 + rr2); sp.lineTo(w, d1 - rr2); sp.quadraticCurveTo(w, d1, w - rr2, d1); sp.lineTo(-w + rr2, d1); sp.quadraticCurveTo(-w, d1, -w, d1 - rr2); sp.lineTo(-w, d0 + rr2); sp.quadraticCurveTo(-w, d0, -w + rr2, d0);
+    const hole = new THREE.Path(), k = .032; hole.moveTo(-w + rr2, d0 + k); hole.lineTo(-w + k, d0 + rr2); hole.lineTo(-w + k, d1 - rr2); hole.lineTo(-w + rr2, d1 - k); hole.lineTo(w - rr2, d1 - k); hole.lineTo(w - k, d1 - rr2); hole.lineTo(w - k, d0 + rr2); hole.lineTo(w - rr2, d0 + k); hole.lineTo(-w + rr2, d0 + k);
+    const meshShape = new THREE.Shape(hole.getPoints()); sp.holes.push(hole);
+    const fr = new THREE.Mesh(new THREE.ExtrudeGeometry(sp, { depth: .03, bevelEnabled: true, bevelSize: .006, bevelThickness: .006, bevelSegments: 2, curveSegments: 8 }), mBlackSoft); fr.rotation.x = Math.PI / 2; fr.position.y = .015; seat.add(fr);
+    const ms = new THREE.Mesh(new THREE.ShapeGeometry(meshShape), mMesh); ms.rotation.x = Math.PI / 2; ms.position.y = .004; seat.add(ms);
+    const lip = cyl(seat, .026, .44, mBlackSoft, 0, -.006, .225, 12); lip.rotation.z = Math.PI / 2; }
+  // 背：上が広く、腰で絞った形の枠＋メッシュ
+  const back = new THREE.Group(); back.position.set(0, .50, -.215); back.rotation.x = -.17; g.add(back);
+  { const out = (k = 0) => { const sp = new THREE.Shape(), bw = .195 - k, mw = .262 - k, top = .60 - k, y0 = k;
+      sp.moveTo(-bw + .04, y0); sp.lineTo(bw - .04, y0); sp.quadraticCurveTo(bw, y0, bw + .008, y0 + .05);
+      sp.bezierCurveTo(bw + .02, .2, mw, .30, mw, .44); sp.quadraticCurveTo(mw, top, mw - .11, top); sp.lineTo(-mw + .11, top); sp.quadraticCurveTo(-mw, top, -mw, .44);
+      sp.bezierCurveTo(-mw, .30, -bw - .02, .2, -bw - .008, y0 + .05); sp.quadraticCurveTo(-bw, y0, -bw + .04, y0); return sp; };
+    const outer = out(0), inner = out(.03); outer.holes.push(new THREE.Path(inner.getPoints(24)));
+    const fr = new THREE.Mesh(new THREE.ExtrudeGeometry(outer, { depth: .026, bevelEnabled: true, bevelSize: .005, bevelThickness: .005, bevelSegments: 2, curveSegments: 16 }), mBlackSoft); fr.position.z = -.013; back.add(fr);
+    const ms = new THREE.Mesh(new THREE.ShapeGeometry(inner, 16), mMesh); back.add(ms);
+    part(back, .075, .40, .04, mBlackSoft, 0, .12, -.055, .018);                              // 背骨のような支柱
+    part(back, .30, .035, .03, mBlackSoft, 0, .30, -.035, .012); part(back, .24, .10, .03, mBlackSoft, 0, .13, -.03, .014);   // 横桟とランバーパッド
+    for (const sx of [-1, 1]) {                                                               // 肘：背の枠の横から立ち上がり、前へ伸びる
+      part(back, .028, .25, .04, mBlackSoft, sx * .285, .14, .0, .01); part(back, .09, .03, .03, mBlackSoft, sx * .245, .05, 0, .01); } }
+  for (const sx of [-1, 1]) { const ap = part(g, .095, .032, .25, mBlackSoft, sx * .295, .72, -.07, .014); ap.rotation.y = sx * .08; }
+  part(g, .07, .05, .16, mBlackSoft, 0, .47, -.20, .02);                                      // 座と背をつなぐ部分
   return sh(g);
 }
 const place = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; add(o); blob(x, z, .85, .85, .75); return o; };
@@ -500,8 +541,8 @@ steelTable(T.x0, T.x1, T.z0, T.z1);
   for (const cx of [1.95, 3.29]) { box(cx - .15, cx + .15, .72, .7215, 2.49, 2.59, mBlack); box(cx - .145, cx + .145, .72, .7225, 2.497, 2.583, mOak); } }
 for (const x of [1.82, 2.62, 3.42]) { place(meetingChair(), x, T.z0 - .22, 0); place(meetingChair(), x, T.z1 + .22, Math.PI); }
 // デスク 1400×700（発注済）＋デスクチェア
-steelTable(1.94, 3.34, .03, .73);
-place(aeron(), 2.64, 1.02, Math.PI);
+steelTable(.58, 1.98, .03, .73);
+place(aeron(), 1.28, 1.02, Math.PI);
 // ローカウンター（造作・監視モニター）＋アーロンチェア3脚
 {
   const z0 = 1.06, z1 = 3.12, x0 = W - .45;
@@ -539,31 +580,44 @@ function locker(x) {
   box(x0, x1, .02, 1.22, z0, z1 - .03, mF, g, .015);
   box(x0 + .003, x1 - .003, .03, .45, z1 - .03, z1, mF, g, .012); box(x0 + .003, x1 - .003, .465, 1.215, z1 - .03, z1, mF, g, .012);
   box(x1 - .07, x1 - .045, .22, .40, z1, z1 + .02, mAlu, g); box(x1 - .07, x1 - .045, .55, .85, z1, z1 + .02, mAlu, g);
-  box(x0 + .07, x1 - .07, 1.23, 1.51, -.20, .18, mWhiteGloss, g, .012);                                    // 電子レンジ
-  box(x0 + .09, x1 - .22, 1.26, 1.48, .18, .183, std({ color: '#1d1f21', roughness: .15 }), g); box(x1 - .19, x1 - .09, 1.27, 1.47, .18, .183, std({ color: '#d5d5d2', roughness: .4 }), g);
+  box(x0 + .065, x1 - .065, 1.23, 1.58, -.20, .19, std({ color: '#17181a', roughness: .35, metalness: .3 }), g, .012);                                    // 電子レンジ
+  box(x0 + .085, x1 - .085, 1.30, 1.52, .19, .193, std({ color: '#0c0d0e', roughness: .12 }), g); box(x0 + .085, x1 - .085, 1.25, 1.285, .19, .193, std({ color: '#2a2c2e', roughness: .4 }), g);
   blob(W - .4, .70, 1.1, 1.0, .8);
 }
 // ベンチ：KANADEMONO THE BENCH（ラバーウッド × Black Steel Line）幅1500×奥行300。板座のみ
 steelTable(1.67, 3.17, 4.18, 4.48, .43);
-// 棚：入って右の壁の奥（デスクの先）。黒スチールの枠＋テーブルと同じ板
+const SHELF_DX = 1.40;
+// 棚：入って右、扉のすぐ先（11/12 にデスクと位置を入れ替え）。KANADEMONO THE STORAGE SHELF 4段（ラバーウッド ブラウン × Black Steel）幅1300×奥行400（書類箱が載るよう奥行を380→400に変更）
+// 段の内寸は上下33cm・中27cm（商品ページ）。上から2段目の天面をテーブルと同じ72cmに合わせた。全高約1.08mは推定
 {
-  const x0 = .62, x1 = 1.92, z0 = .03, z1 = .41, g = new THREE.Group(); add(g);
-  for (const x of [x0, x1 - .025]) for (const z of [z0, z1 - .025]) box(x, x + .025, 0, 1.80, z, z + .025, mBlack, g);
-  for (const y of [.12, .54, .96, 1.38, 1.78]) { const b = box(x0, x1, y, y + .03, z0, z1, mWoodTop.clone(), g); b.material.map = tex(woodC, .8, .25); mats.push(b.material); }
-  box(x0, x1, 1.0, 1.02, z0, z0 + .012, mBlack, g);
+  const x0 = .62, x1 = 1.92, z0 = .03, z1 = .43, T = .025, top = 1.075, g = new THREE.Group(); add(g); g.position.x = SHELF_DX;   // 棚はデスクと入れ替えて扉寄りへ
+  // 板の下面の高さ（下から）
+  const ys = [.045, .40, .695, 1.05];
+  for (const y of ys) { const b = box(x0, x1, y, y + T, z0, z1, mWoodTop.clone(), g); b.material.map = tex(woodC, .8, .25); mats.push(b.material); }
+  // 脚：幅4.5cmの黒い鉄プレート。両端と中央（幅121cm以上は中間脚が入る）
+  for (const x of [x0, (x0 + x1) / 2 - .003, x1 - .006]) {
+    for (const z of [z0, z1 - .045]) box(x, x + .006, 0, top, z, z + .045, mBlack, g);
+    box(x, x + .006, 0, .012, z0, z1, mBlack, g);
+  }
   // 置いてあるもの（白い収納ボックス・ファイル・小さな鉢）は仮
-  for (const [a, y] of [[.68, .15], [1.02, .15], [1.36, .15], [.68, .57], [1.02, .57]]) box(a, a + .30, y, y + .26, z0 + .04, z1 - .03, mWhite, g, .012);
-  let fx = 1.40; for (let k = 0; k < 9; k++) { const w = rr(.03, .055); box(fx, fx + w, .57, .57 + rr(.26, .31), z0 + .06, z1 - .06, std({ color: ['#2c2e30', '#e9e7e1', '#8c6540', '#4b5648'][k % 4], roughness: .7 }), g); fx += w + .004; }
-  fx = .70; for (let k = 0; k < 12; k++) { const w = rr(.025, .05); box(fx, fx + w, .99, .99 + rr(.22, .3), z0 + .08, z1 - .06, std({ color: ['#e9e7e1', '#2c2e30', '#b9b2a4'][k % 3], roughness: .7 }), g); fx += w + .004; }
-  cyl(g, .07, .12, mWhite, 1.62, 1.05, .22, 20, .085); for (let k = 0; k < 14; k++) { const l = part(g, .012, .2, .03, mLeaf, 1.62, 1.2, .22); l.rotation.set(rr(-.7, .7), rr(0, 6), rr(-.7, .7)); }
-  box(.75, 1.15, 1.41, 1.63, z0 + .05, z1 - .05, mWhite, g, .012); box(1.3, 1.75, 1.41, 1.56, z0 + .05, z1 - .05, std({ color: '#b9b2a4', roughness: .9 }), g, .012);
-  blob(1.27, .3, 1.8, .9, .8);
+  // バンカーズボックス風の書類箱（白い段ボール＋ふた＋持ち手穴）。幅340×奥行400×高さ260は記憶ベースの概寸で未確認
+  // 脚の間（約64cm）には横に1箱しか入らない
+  const bbox = (bx, by) => {
+    box(bx, bx + .34, by, by + .215, z0 + .005, z1 - .005, mWhite, g, .004);
+    box(bx - .004, bx + .344, by + .205, by + .26, z0, z1 + .002, mWhite, g, .004);
+    box(bx + .12, bx + .22, by + .12, by + .15, z1 - .006, z1 - .003, mBlack, g);
+    box(bx + .03, bx + .31, by + .03, by + .075, z1 - .006, z1 - .0045, std({ color: '#2a2b2d', roughness: .8 }), g);
+  };
+  bbox(.70, .07); bbox(1.42, .07); bbox(.70, .72);
+  let fx = .66; for (let k = 0; k < 11; k++) { const w = rr(.03, .05); box(fx, fx + w, .425, .425 + rr(.2, .25), z0 + .07, z1 - .06, std({ color: ['#2c2e30', '#e9e7e1', '#8c6540', '#4b5648'][k % 4], roughness: .7 }), g); fx += w + .004; }
+  fx = 1.31; for (let k = 0; k < 11; k++) { const w = rr(.03, .05); box(fx, fx + w, .72, .72 + rr(.26, .31), z0 + .07, z1 - .06, std({ color: ['#e9e7e1', '#2c2e30', '#b9b2a4'][k % 3], roughness: .7 }), g); fx += w + .004; }
+  blob(1.27 + SHELF_DX, .3, 1.8, .9, .8);
 }
-// ラグ：会議テーブルの下（3.6m×2.6m・毛足の短い織り）
+// ラグ：会議テーブルの下（3.6m×2.6m）。東リ グレース ライトグレー GJ2549（土足可・ナイロンのループパイル）260×360cm
 {
-  const [c, x] = canvas(512, 512); x.fillStyle = '#b8a88c'; x.fillRect(0, 0, 512, 512);
-  for (let y = 0; y < 512; y += 3) { x.fillStyle = `rgba(${rnd() < .5 ? '110,95,70' : '235,225,205'},${rr(.04,.12)})`; x.fillRect(0, y, 512, 2); }
-  for (let q = 0; q < 512; q += 4) { x.fillStyle = `rgba(110,95,70,${rr(.02,.08)})`; x.fillRect(q, 0, 1.5, 512); }
+  const [c, x] = canvas(512, 512); x.fillStyle = '#a9a8a4'; x.fillRect(0, 0, 512, 512);
+  for (let y = 0; y < 512; y += 3) { x.fillStyle = `rgba(${rnd() < .5 ? '80,80,78' : '225,225,221'},${rr(.04,.12)})`; x.fillRect(0, y, 512, 2); }
+  for (let q = 0; q < 512; q += 4) { x.fillStyle = `rgba(80,80,78,${rr(.02,.08)})`; x.fillRect(q, 0, 1.5, 512); }
   grain(x, 512, 512, 10);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 2.6), std({ map: tex(c, 6, 4.4), roughness: 1 }));
   m.rotation.x = -Math.PI / 2; m.position.set(2.62, .0032, 2.55); m.receiveShadow = true; add(m);
@@ -579,7 +633,7 @@ function plant(x, z, s = 1) {
   for (let i = 0; i < 46; i++) { const l = new THREE.Mesh(lg, mLeaf); const pv = new THREE.Group(); pv.position.y = .78 + rr(0, .14); pv.rotation.y = rr(0, 6.28); l.rotation.x = rr(.05, 1.25); l.scale.setScalar(rr(.7, 1.15)); l.castShadow = true; pv.add(l); g.add(pv); }
   blob(x, z, .9 * s, .9 * s, .8);
 }
-plant(.50, .80, 1.0); plant(.48, 5.18, .95);
+plant(.27, .62, .9); plant(.48, 5.18, .95);
 // プロジェクタースクリーン 80インチ（鏡の前に降りる）
 const screen = new THREE.Group(); add(screen);
 box(.17, .26, 2.06, 2.15, 1.55, 3.55, mWhite, screen);
@@ -590,19 +644,98 @@ box(.17, .26, 2.06, 2.15, 1.55, 3.55, mWhite, screen);
   cyl(screen, .016, w + .08, mWhite, .214, top - h - .13, zc, 12).rotation.x = Math.PI / 2;
 }
 screen.visible = false;
-// 山崎実業・白系でそろえる小物（仮置き）
-cyl(room, .11, .42, mWhite, 3.52, .21, .36, 24, .13); blob(3.52, .36, .5, .5, .7);                          // ゴミ箱
-box(2.02, 2.26, .72, .80, .12, .25, mWhite, room, .01);                                                     // ティッシュケース
-box(2.95, 3.20, .72, .735, .30, .48, std({ color: '#2a2c2e', roughness: .4, metalness: .5 }));              // ノートPC
-{ const m = box(2.95, 3.20, .735, .90, .30, .305, std({ color: '#2a2c2e', roughness: .4, metalness: .5 })); m.rotation.x = .18; }
+// ============================================================
+// 追加の備品（11/12 JUN指示）。機種は候補段階のものを含む。寸法は各商品ページの値、形は簡略
+// ============================================================
+const mDark = std({ color: '#1b1c1e', roughness: .5, metalness: .25 });
+// 山崎実業 tower 風の小物：ティッシュケース（白）×3、角形ゴミ箱（白）×3
+const tissue = (x, y, z, rot = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rot; add(g); part(g, .26, .075, .135, mWhite, 0, .0375, 0, .008); part(g, .12, .002, .03, mDark, 0, .076, 0); return sh(g); };
+tissue(.78, .72, .19); tissue(2.62, .72, 2.54); tissue(W - .30, .72, 3.02, Math.PI / 2);
+const trash = (x, z) => { const g = new THREE.Group(); g.position.set(x, 0, z); add(g); part(g, .19, .40, .285, mWhite, 0, .20, 0, .012); part(g, .15, .006, .245, mDark, 0, .401, 0); blob(x, z, .45, .5, .7); return sh(g); };
+trash(3.50, .34); trash(W - .30, 3.34); trash(3.40, 4.33);
+// 傘立て（山崎実業風・スリム白）：扉を入って右
+{ const g = new THREE.Group(); g.position.set(4.72, 0, .16); add(g);
+  part(g, .40, .02, .16, mWhite, 0, .01, 0, .006); for (const x of [-.19, .19]) part(g, .012, .50, .012, mWhite, x, .26, -.07);
+  part(g, .40, .012, .012, mWhite, 0, .50, -.07); part(g, .40, .012, .012, mWhite, 0, .50, .07); for (const x of [-.19, .19]) part(g, .012, .012, .15, mWhite, x, .50, 0);
+  for (const [x, c] of [[-.1, '#20242c'], [.02, '#e8e6df'], [.12, '#3c4a3f']]) { const u = cyl(g, .022, .78, std({ color: c, roughness: .8 }), x, .41, 0, 10, .012); u.rotation.z = rr(-.06, .06); }
+  sh(g); blob(4.72, .2, .7, .45, .6); }
+// 空気清浄機（BALMUDA The Pure ダークグレーを想定・W260×D260×H700）：扉を入って右、傘立ての先
+{ const g = new THREE.Group(); g.position.set(5.06, 0, .19); add(g);
+  part(g, .26, .66, .26, std({ color: '#3b3c3e', roughness: .6 }), 0, .37, 0, .02); part(g, .22, .04, .22, std({ color: '#1c1d1f', roughness: .5 }), 0, .02, 0);
+  part(g, .20, .012, .20, std({ color: '#141516', roughness: .4 }), 0, .705, 0); sh(g); blob(5.06, .22, .5, .5, .6); }
+// 玄関マット（グレー・900×600）＋ MORE TIME ロゴ（∞を上下に重ねたマーク＋ more time。~/Downloads/MORETIME_C_monochrome_vector.svg、2026-10-26。10/30 に白井さんへ送った「最終版ロゴ」と同じものかは添付名までは未照合）
+{ const [c, x] = canvas(900, 600); const t = tex(c, 1, 1);
+  const paint = logo => { x.globalCompositeOperation = 'source-over'; x.fillStyle = '#8b8b88'; x.fillRect(0, 0, 900, 600); grain(x, 900, 600, 16);
+    x.strokeStyle = 'rgba(40,40,40,.35)'; x.lineWidth = 10; x.strokeRect(5, 5, 890, 590);
+    if (logo) x.drawImage(logo, 215, 80, 469, 440); t.needsUpdate = true; };
+  paint(null);
+  const img = new Image(); img.onload = () => {   // ロゴ（1254角の版面）を拡大して切り出し、白一色に塗り替えてから載せる（マットはグラデーションを再現できないため）
+    const [big, bx] = canvas(2508, 2508); bx.drawImage(img, 0, 0, 2508, 2508);
+    const [lc, lx] = canvas(1600, 1500); lx.drawImage(big, 460, 520, 1600, 1500, 0, 0, 1600, 1500);
+    lx.globalCompositeOperation = 'source-in'; lx.fillStyle = '#f4f3ee'; lx.fillRect(0, 0, 1600, 1500); paint(lc); };
+  img.src = 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pgo8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMzAuOC4yLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogOS4wMyBCdWlsZCAwKSAgLS0+CjxzdmcgdmVyc2lvbj0iMS4xIiBpZD0iJiN4MzBFQzsmI3gzMEE0OyYjeDMwRTQ7JiN4MzBGQztfMSIKCSB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMCAwIDEyNTQgMTI1NCIKCSBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDAgMCAxMjU0IDEyNTQ7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4KPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCAwKSI+Cgk8cGF0aCBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7ZmlsbDojNjY2NjY2OyIgZD0iTTQ4MC44NTE5LDI5MS45MDg4CgkJYzU5LjMzNzItMS4wMDEzLDEwMi43MzMsNDMuMDU0NywxNDIuNTg2MywxMDIuMTI5NmM1MC40ODA4LTY1LjA4MjYsOTUuNjQ3OS0xMDQuMTMyMSwxNDcuMDE0NC0xMDMuMTMwOQoJCWM2OS45NjQ3LTEuMDAxMywxMjcuNTMwNiw1My4wNjczLDEyNy41MzA2LDExNS4xNDYxYzEuNzcxMyw3MC4wODg5LTU3LjU2NTksMTIzLjE1NjMtMTI4LjQxNjIsMTIzLjE1NjMKCQljLTY3LjMwNzgsMC0xMTYuMDE3NC0zNi4wNDU3LTE1Ni43NTYzLTg4LjExMThjLTQ2LjkzODQsNTcuMDcyNC04OS40NDg1LDgxLjEwMjktMTM5LjA0MzgsODIuMTA0MgoJCWMtNjYuNDIyMiwwLTExNy43ODg3LTQ0LjA1NTktMTE3Ljc4ODctMTA4LjEzNzJTNDE0LjQyOTcsMjkxLjkwODgsNDgwLjg1MTksMjkxLjkwODh6IE00NjEuMzY4LDMwNC45MjUzCgkJYy00Ni45Mzg0LTEuMDAxMy04Mi4zNjM1LDQ0LjA1NTktODMuMjQ5MSw5OC4xMjQ1Yy0xLjc3MTIsNjQuMDgxMywzOC45Njc3LDExMy4xNDM2LDk1LjY0NzksMTE0LjE0NDgKCQljNDYuOTM4NCwxLjAwMTMsODYuNzkxNi0zNi4wNDU3LDEyOC40MTYyLTkyLjExNjlDNTU2LjEzMDQsMzUwLjk4MzcsNTE2LjI3NywzMDMuOTI0LDQ2MS4zNjgsMzA0LjkyNTN6IE03NzEuMzM4MiwyOTYuOTE1MQoJCWMtNDYuMDUyNy0zLjAwMzgtODcuNjc3Miw0NS4wNTcyLTEzNi4zODY4LDExNC4xNDQ4YzQ1LjE2NzEsNjkuMDg3Niw4NS4wMjA0LDEwOS4xMzg1LDEzNi4zODY4LDExMC4xMzk3CgkJYzU2LjY4MDMsMi4wMDI2LDk5LjE5MDUtNDMuMDU0Niw5OC4zMDQ5LTEwNC4xMzIxQzg3MC41Mjg3LDM1My45ODc1LDgyOS43ODk3LDI5Ni45MTUxLDc3MS4zMzgyLDI5Ni45MTUxeiIvPgoJPGc+CgkJPGRlZnM+CgkJCTxwYXRoIGlkPSJTVkdJRF8xXyIgZD0iTTQ4MC44NTE5LDI5MS45MDg4YzU5LjMzNzItMS4wMDEzLDEwMi43MzMsNDMuMDU0NywxNDIuNTg2MywxMDIuMTI5NgoJCQkJYzUwLjQ4MDgtNjUuMDgyNiw5NS42NDc5LTEwNC4xMzIxLDE0Ny4wMTQ0LTEwMy4xMzA5YzY5Ljk2NDctMS4wMDEzLDEyNy41MzA2LDUzLjA2NzMsMTI3LjUzMDYsMTE1LjE0NjEKCQkJCWMxLjc3MTMsNzAuMDg4OS01Ny41NjU5LDEyMy4xNTYzLTEyOC40MTYyLDEyMy4xNTYzYy02Ny4zMDc4LDAtMTE2LjAxNzQtMzYuMDQ1Ny0xNTYuNzU2My04OC4xMTE4CgkJCQljLTQ2LjkzODQsNTcuMDcyNC04OS40NDg1LDgxLjEwMjktMTM5LjA0MzgsODIuMTA0MmMtNjYuNDIyMiwwLTExNy43ODg3LTQ0LjA1NTktMTE3Ljc4ODctMTA4LjEzNzIKCQkJCVM0MTQuNDI5NywyOTEuOTA4OCw0ODAuODUxOSwyOTEuOTA4OHogTTQ2MS4zNjgsMzA0LjkyNTNjLTQ2LjkzODQtMS4wMDEzLTgyLjM2MzUsNDQuMDU1OS04My4yNDkxLDk4LjEyNDUKCQkJCWMtMS43NzEyLDY0LjA4MTMsMzguOTY3NywxMTMuMTQzNiw5NS42NDc5LDExNC4xNDQ4YzQ2LjkzODQsMS4wMDEzLDg2Ljc5MTYtMzYuMDQ1NywxMjguNDE2Mi05Mi4xMTY5CgkJCQlDNTU2LjEzMDQsMzUwLjk4MzcsNTE2LjI3NywzMDMuOTI0LDQ2MS4zNjgsMzA0LjkyNTN6IE03NzEuMzM4MiwyOTYuOTE1MWMtNDYuMDUyNy0zLjAwMzgtODcuNjc3Miw0NS4wNTcyLTEzNi4zODY4LDExNC4xNDQ4CgkJCQljNDUuMTY3MSw2OS4wODc2LDg1LjAyMDQsMTA5LjEzODUsMTM2LjM4NjgsMTEwLjEzOTdjNTYuNjgwMywyLjAwMjYsOTkuMTkwNS00My4wNTQ2LDk4LjMwNDktMTA0LjEzMjEKCQkJCUM4NzAuNTI4NywzNTMuOTg3NSw4MjkuNzg5NywyOTYuOTE1MSw3NzEuMzM4MiwyOTYuOTE1MXoiLz4KCQk8L2RlZnM+CgkJPGNsaXBQYXRoIGlkPSJTVkdJRF8wMDAwMDAzNjk0MDk5ODQ0MTc5NTY0MDQyMDAwMDAwNTkwNDQ3NjQwODk2NDkyNjg1MF8iPgoJCQk8dXNlIHhsaW5rOmhyZWY9IiNTVkdJRF8xXyIgIHN0eWxlPSJvdmVyZmxvdzp2aXNpYmxlOyIvPgoJCTwvY2xpcFBhdGg+CgkJPGcgc3R5bGU9ImNsaXAtcGF0aDp1cmwoI1NWR0lEXzAwMDAwMDM2OTQwOTk4NDQxNzk1NjQwNDIwMDAwMDA1OTA0NDc2NDA4OTY0OTI2ODUwXyk7Ij4KCQkJCgkJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzAwMDAwMTE2MTk1MjIyNTQwODcwMTMxNDEwMDAwMDA1NDI0ODg4ODYwODA0MDY5NTQ1XyIgY3g9IjU3My4xOTI5IiBjeT0iNjgyLjEwMSIgcj0iMC45ODY5IiBncmFkaWVudFRyYW5zZm9ybT0ibWF0cml4KDE0My41NzczIDAgMCAtMTE2LjY3MTEgLTgxNzkwLjk4NDQgNzk4NzQuMzk4NCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KCQkJCTxzdG9wICBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkZGRkY7c3RvcC1vcGFjaXR5OjAuOSIvPgoJCQkJPHN0b3AgIG9mZnNldD0iMSIgc3R5bGU9InN0b3AtY29sb3I6I0ZGRkZGRjtzdG9wLW9wYWNpdHk6MCIvPgoJCQk8L3JhZGlhbEdyYWRpZW50PgoJCQk8cGF0aCBzdHlsZT0iZmlsbDp1cmwoI1NWR0lEXzAwMDAwMTE2MTk1MjIyNTQwODcwMTMxNDEwMDAwMDA1NDI0ODg4ODYwODA0MDY5NTQ1Xyk7IiBkPSJNMzQ3LjEyMTksMjgyLjg5NzNoNTU3Ljk0NjNWNTMzLjIxNQoJCQkJSDM0Ny4xMjE5VjI4Mi44OTczeiIvPgoJCQkKCQkJCTxyYWRpYWxHcmFkaWVudCBpZD0iU1ZHSURfMDAwMDAwMTA5OTg3ODE5MTc1NjI3NTcxNDAwMDAwMTY0MDQ5MzE2MTk0MzQzNzk2NjFfIiBjeD0iNTcwLjQwMjMiIGN5PSI2ODIuNTUzIiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoODIuNTU3IDAgMCAtMTA3LjU0MDMgLTQ2NzI5LjM5NDUgNzM4NDguMDc4MSkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KCQkJCTxzdG9wICBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiMwMDAwMDAiLz4KCQkJCTxzdG9wICBvZmZzZXQ9IjEiIHN0eWxlPSJzdG9wLWNvbG9yOiMwMDAwMDA7c3RvcC1vcGFjaXR5OjAiLz4KCQkJPC9yYWRpYWxHcmFkaWVudD4KCQkJPHBhdGggc3R5bGU9ImZpbGw6dXJsKCNTVkdJRF8wMDAwMDAxMDk5ODc4MTkxNzU2Mjc1NzE0MDAwMDAxNjQwNDkzMTYxOTQzNDM3OTY2MV8pOyIgZD0iTTM0Ny4xMjE5LDI4Mi44OTczaDU1Ny45NDYzVjUzMy4yMTUKCQkJCUgzNDcuMTIxOVYyODIuODk3M3oiLz4KCQkJCgkJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzAwMDAwMDc1ODY4NTYyNTc1NjU1OTYxNDQwMDAwMDA2NTYyNTA2ODc3OTUyNzU3ODg5XyIgY3g9IjU2MS44MTciIGN5PSI2ODYuMDQzIiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoMzUuODk0MyAwIDAgLTY1Ljk0NDUgLTE5NzgyLjYxNzIgNDU2MjMuODE2NCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KCQkJCTxzdG9wICBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkZGRkY7c3RvcC1vcGFjaXR5OjAuODUiLz4KCQkJCTxzdG9wICBvZmZzZXQ9IjEiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkZGRkY7c3RvcC1vcGFjaXR5OjAiLz4KCQkJPC9yYWRpYWxHcmFkaWVudD4KCQkJPHBhdGggc3R5bGU9ImZpbGw6dXJsKCNTVkdJRF8wMDAwMDA3NTg2ODU2MjU3NTY1NTk2MTQ0MDAwMDAwNjU2MjUwNjg3Nzk1Mjc1Nzg4OV8pOyIgZD0iTTM0Ny4xMjE5LDI4Mi44OTczaDU1Ny45NDYzVjUzMy4yMTUKCQkJCUgzNDcuMTIxOVYyODIuODk3M3oiLz4KCQkJCgkJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzAwMDAwMTIzNDE2MTA1ODgwMDAzMzQ2ODkwMDAwMDExODkxOTc0MjIwODQ2NDg0NjE4XyIgY3g9IjU3Mi4zMDI1IiBjeT0iNjgxLjcwNzMiIHI9IjAuOTg2OSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxMTYuNjU2NiAwIDAgLTEyNi44MTY0IC02NjE1MS44MjAzIDg2ODgyLjc4MTIpIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CgkJCQk8c3RvcCAgb2Zmc2V0PSIwIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowLjc4Ii8+CgkJCQk8c3RvcCAgb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowIi8+CgkJCTwvcmFkaWFsR3JhZGllbnQ+CgkJCTxwYXRoIHN0eWxlPSJmaWxsOnVybCgjU1ZHSURfMDAwMDAxMjM0MTYxMDU4ODAwMDMzNDY4OTAwMDAwMTE4OTE5NzQyMjA4NDY0ODQ2MThfKTsiIGQ9Ik0zNDcuMTIxOSwyODIuODk3M2g1NTcuOTQ2M1Y1MzMuMjE1CgkJCQlIMzQ3LjEyMTlWMjgyLjg5NzN6Ii8+CgkJCQoJCQkJPHJhZGlhbEdyYWRpZW50IGlkPSJTVkdJRF8wMDAwMDA1NzEwNzc5NTAzOTg4Njg1MTQyMDAwMDAxMDI2Mjc3Nzc0OTg3OTAyMTc0Nl8iIGN4PSI1NjcuNTQwOCIgY3k9IjY4Mi4zNDUyIiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoNTguMzI4MyAwIDAgLTExMS41OTg1IC0zMjIxMC4xMzI4IDc2NTQ1LjcxODgpIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CgkJCQk8c3RvcCAgb2Zmc2V0PSIwIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowLjk1Ii8+CgkJCQk8c3RvcCAgb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowIi8+CgkJCTwvcmFkaWFsR3JhZGllbnQ+CgkJCTxwYXRoIHN0eWxlPSJmaWxsOnVybCgjU1ZHSURfMDAwMDAwNTcxMDc3OTUwMzk4ODY4NTE0MjAwMDAwMTAyNjI3Nzc3NDk4NzkwMjE3NDZfKTsiIGQ9Ik0zNDcuMTIxOSwyODIuODk3M2g1NTcuOTQ2M1Y1MzMuMjE1CgkJCQlIMzQ3LjEyMTlWMjgyLjg5NzN6Ii8+CgkJCQoJCQkJPHJhZGlhbEdyYWRpZW50IGlkPSJTVkdJRF8wMDAwMDE2OTU0MTYwMDkwNzMzNzk0NTU1MDAwMDAxNTU2OTI4NTY5NTYwODUyODU0Nl8iIGN4PSI1NjguMDk1OCIgY3k9IjY4Ni40OTc4IiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoNjEuOTE3NyAwIDAgLTYyLjkwMSAtMzQzMTIuNjQ0NSA0MzY0Ni40OTIyKSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgoJCQkJPHN0b3AgIG9mZnNldD0iMCIgc3R5bGU9InN0b3AtY29sb3I6I0ZGRkZGRjtzdG9wLW9wYWNpdHk6MC43Ii8+CgkJCQk8c3RvcCAgb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojRkZGRkZGO3N0b3Atb3BhY2l0eTowIi8+CgkJCTwvcmFkaWFsR3JhZGllbnQ+CgkJCTxwYXRoIHN0eWxlPSJmaWxsOnVybCgjU1ZHSURfMDAwMDAxNjk1NDE2MDA5MDczMzc5NDU1NTAwMDAwMTU1NjkyODU2OTU2MDg1Mjg1NDZfKTsiIGQ9Ik0zNDcuMTIxOSwyODIuODk3M2g1NTcuOTQ2M1Y1MzMuMjE1CgkJCQlIMzQ3LjEyMTlWMjgyLjg5NzN6Ii8+CgkJCQoJCQkJPHJhZGlhbEdyYWRpZW50IGlkPSJTVkdJRF8wMDAwMDEzOTI5MjU3NjU1NzU3MTgyODgwMDAwMDAxODA2OTU2NDAxMzUzMDA3MjcxOF8iIGN4PSI1NzIuOTE1IiBjeT0iNjg3LjcyMjEiIHI9IjAuOTg2OSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxMzQuNjAzOCAwIDAgLTU1Ljc5OTIgLTc2MzY0LjY1NjIgMzg5MDQuNTc0MikiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KCQkJCTxzdG9wICBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiNBQUFBQUE7c3RvcC1vcGFjaXR5OjAuNiIvPgoJCQkJPHN0b3AgIG9mZnNldD0iMSIgc3R5bGU9InN0b3AtY29sb3I6I0FBQUFBQTtzdG9wLW9wYWNpdHk6MCIvPgoJCQk8L3JhZGlhbEdyYWRpZW50PgoJCQk8cGF0aCBzdHlsZT0iZmlsbDp1cmwoI1NWR0lEXzAwMDAwMTM5MjkyNTc2NTU3NTcxODI4ODAwMDAwMDE4MDY5NTY0MDEzNTMwMDcyNzE4Xyk7IiBkPSJNMzQ3LjEyMTksMjgyLjg5NzNoNTU3Ljk0NjNWNTMzLjIxNQoJCQkJSDM0Ny4xMjE5VjI4Mi44OTczeiIvPgoJCTwvZz4KCTwvZz4KPC9nPgo8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDI3MikiPgoJPHBhdGggc3R5bGU9ImZpbGwtcnVsZTpldmVub2RkO2NsaXAtcnVsZTpldmVub2RkO2ZpbGw6IzY2NjY2NjsiIGQ9Ik00ODAuODUxOSwyNzIuODAxNAoJCWM1OS4zMzcyLTEuMDAxMywxMDIuNzMzLDQzLjA1NDYsMTQyLjU4NjMsMTAyLjEyOTZjNTAuNDgwOC02NS4wODI2LDk1LjY0NzktMTA0LjEzMjEsMTQ3LjAxNDQtMTAzLjEzMDkKCQljNjkuOTY0Ny0xLjAwMTMsMTI3LjUzMDYsNTMuMDY3NCwxMjcuNTMwNiwxMTUuMTQ2MWMxLjc3MTMsNzAuMDg5LTU3LjU2NTksMTIzLjE1NjMtMTI4LjQxNjIsMTIzLjE1NjMKCQljLTY3LjMwNzgsMC0xMTYuMDE3NC0zNi4wNDU3LTE1Ni43NTYzLTg4LjExMThjLTQ2LjkzODQsNTcuMDcyNC04OS40NDg1LDgxLjEwMjktMTM5LjA0MzgsODIuMTA0MgoJCWMtNjYuNDIyMiwwLTExNy43ODg3LTQ0LjA1NTktMTE3Ljc4ODctMTA4LjEzNzJTNDE0LjQyOTcsMjcyLjgwMTQsNDgwLjg1MTksMjcyLjgwMTR6IE00NjEuMzY4LDI4NS44MTc5CgkJYy00Ni45Mzg0LTEuMDAxMy04Mi4zNjM1LDQ0LjA1NTktODMuMjQ5MSw5OC4xMjQ1Yy0xLjc3MTIsNjQuMDgxMywzOC45Njc3LDExMy4xNDM2LDk1LjY0NzksMTE0LjE0NDkKCQljNDYuOTM4NCwxLjAwMTMsODYuNzkxNi0zNi4wNDU3LDEyOC40MTYyLTkyLjExNjlDNTU2LjEzMDQsMzMxLjg3NjQsNTE2LjI3NywyODQuODE2Nyw0NjEuMzY4LDI4NS44MTc5eiBNNzcxLjMzODIsMjc3LjgwNzgKCQljLTQ2LjA1MjctMy4wMDM4LTg3LjY3NzIsNDUuMDU3Mi0xMzYuMzg2OCwxMTQuMTQ0OWM0NS4xNjcxLDY5LjA4NzYsODUuMDIwNCwxMDkuMTM4NSwxMzYuMzg2OCwxMTAuMTM5NwoJCWM1Ni42ODAzLDIuMDAyNSw5OS4xOTA1LTQzLjA1NDYsOTguMzA0OS0xMDQuMTMyMUM4NzAuNTI4NywzMzQuODgwMiw4MjkuNzg5NywyNzcuODA3OCw3NzEuMzM4MiwyNzcuODA3OHoiLz4KCTxnPgoJCTxkZWZzPgoJCQk8cGF0aCBpZD0iU1ZHSURfMDAwMDAxMjkxODMwMjUxMTg3NTU0ODU3OTAwMDAwMTIzNDQxNjk1NzE5NjQ2ODU3MjJfIiBkPSJNNDgwLjg1MTksMjcyLjgwMTQKCQkJCWM1OS4zMzcyLTEuMDAxMywxMDIuNzMzLDQzLjA1NDYsMTQyLjU4NjMsMTAyLjEyOTZjNTAuNDgwOC02NS4wODI2LDk1LjY0NzktMTA0LjEzMjEsMTQ3LjAxNDQtMTAzLjEzMDkKCQkJCWM2OS45NjQ3LTEuMDAxMywxMjcuNTMwNiw1My4wNjc0LDEyNy41MzA2LDExNS4xNDYxYzEuNzcxMyw3MC4wODktNTcuNTY1OSwxMjMuMTU2My0xMjguNDE2MiwxMjMuMTU2MwoJCQkJYy02Ny4zMDc4LDAtMTE2LjAxNzQtMzYuMDQ1Ny0xNTYuNzU2My04OC4xMTE4Yy00Ni45Mzg0LDU3LjA3MjQtODkuNDQ4NSw4MS4xMDI5LTEzOS4wNDM4LDgyLjEwNDIKCQkJCWMtNjYuNDIyMiwwLTExNy43ODg3LTQ0LjA1NTktMTE3Ljc4ODctMTA4LjEzNzJTNDE0LjQyOTcsMjcyLjgwMTQsNDgwLjg1MTksMjcyLjgwMTR6IE00NjEuMzY4LDI4NS44MTc5CgkJCQljLTQ2LjkzODQtMS4wMDEzLTgyLjM2MzUsNDQuMDU1OS04My4yNDkxLDk4LjEyNDVjLTEuNzcxMiw2NC4wODEzLDM4Ljk2NzcsMTEzLjE0MzYsOTUuNjQ3OSwxMTQuMTQ0OQoJCQkJYzQ2LjkzODQsMS4wMDEzLDg2Ljc5MTYtMzYuMDQ1NywxMjguNDE2Mi05Mi4xMTY5QzU1Ni4xMzA0LDMzMS44NzY0LDUxNi4yNzcsMjg0LjgxNjcsNDYxLjM2OCwyODUuODE3OXogTTc3MS4zMzgyLDI3Ny44MDc4CgkJCQljLTQ2LjA1MjctMy4wMDM4LTg3LjY3NzIsNDUuMDU3Mi0xMzYuMzg2OCwxMTQuMTQ0OWM0NS4xNjcxLDY5LjA4NzYsODUuMDIwNCwxMDkuMTM4NSwxMzYuMzg2OCwxMTAuMTM5NwoJCQkJYzU2LjY4MDMsMi4wMDI1LDk5LjE5MDUtNDMuMDU0Niw5OC4zMDQ5LTEwNC4xMzIxQzg3MC41Mjg3LDMzNC44ODAyLDgyOS43ODk3LDI3Ny44MDc4LDc3MS4zMzgyLDI3Ny44MDc4eiIvPgoJCTwvZGVmcz4KCQk8Y2xpcFBhdGggaWQ9IlNWR0lEXzAwMDAwMDkzMTU0MTIwOTA3OTI3OTAyNTQwMDAwMDE1Mjg3ODEzMDc5OTE3ODIyNTkyXyI+CgkJCTx1c2UgeGxpbms6aHJlZj0iI1NWR0lEXzAwMDAwMTI5MTgzMDI1MTE4NzU1NDg1NzkwMDAwMDEyMzQ0MTY5NTcxOTY0Njg1NzIyXyIgIHN0eWxlPSJvdmVyZmxvdzp2aXNpYmxlOyIvPgoJCTwvY2xpcFBhdGg+CgkJPGcgc3R5bGU9ImNsaXAtcGF0aDp1cmwoI1NWR0lEXzAwMDAwMDkzMTU0MTIwOTA3OTI3OTAyNTQwMDAwMDE1Mjg3ODEzMDc5OTE3ODIyNTkyXyk7Ij4KCQkJCgkJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzAwMDAwMDUyMDYyMDY2Nzc4NjUyMTE2NTgwMDAwMDE0MzU4NTkxMjg1MjM1NDQzODQ2XyIgY3g9IjU3My4xOTI5IiBjeT0iNDEwLjI5ODciIHI9IjAuOTg2OSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxNDMuNTc3MyAwIDAgLTExNi42NzExIC04MTc5MC45ODQ0IDQ4MTQzLjgwNDcpIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CgkJCQk8c3RvcCAgb2Zmc2V0PSIwIiBzdHlsZT0ic3RvcC1jb2xvcjojRkZGRkZGO3N0b3Atb3BhY2l0eTowLjkiLz4KCQkJCTxzdG9wICBvZmZzZXQ9IjEiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkZGRkY7c3RvcC1vcGFjaXR5OjAiLz4KCQkJPC9yYWRpYWxHcmFkaWVudD4KCQkJPHBhdGggc3R5bGU9ImZpbGw6dXJsKCNTVkdJRF8wMDAwMDA1MjA2MjA2Njc3ODY1MjExNjU4MDAwMDAxNDM1ODU5MTI4NTIzNTQ0Mzg0Nl8pOyIgZD0iTTM0Ny4xMjE5LDI2My43OWg1NTcuOTQ2M3YyNTAuMzE3NgoJCQkJSDM0Ny4xMjE5VjI2My43OXoiLz4KCQkJCgkJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzAwMDAwMTYzNzUzMDI2NTgyNjY3MTY1NDEwMDAwMDE1NjMwMzkyNjM1MjQ4MTI5OTgxXyIgY3g9IjU3MC40MDIzIiBjeT0iNDEwLjc2NzQiIHI9IjAuOTg2OSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCg4Mi41NTcgMCAwIC0xMDcuNTQwMyAtNDY3MjkuMzk0NSA0NDYwMS4wNjI1KSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgoJCQkJPHN0b3AgIG9mZnNldD0iMCIgc3R5bGU9InN0b3AtY29sb3I6IzAwMDAwMCIvPgoJCQkJPHN0b3AgIG9mZnNldD0iMSIgc3R5bGU9InN0b3AtY29sb3I6IzAwMDAwMDtzdG9wLW9wYWNpdHk6MCIvPgoJCQk8L3JhZGlhbEdyYWRpZW50PgoJCQk8cGF0aCBzdHlsZT0iZmlsbDp1cmwoI1NWR0lEXzAwMDAwMTYzNzUzMDI2NTgyNjY3MTY1NDEwMDAwMDE1NjMwMzkyNjM1MjQ4MTI5OTgxXyk7IiBkPSJNMzQ3LjEyMTksMjYzLjc5aDU1Ny45NDYzdjI1MC4zMTc2CgkJCQlIMzQ3LjEyMTlWMjYzLjc5eiIvPgoJCQkKCQkJCTxyYWRpYWxHcmFkaWVudCBpZD0iU1ZHSURfMDAwMDAxMzc4MjgwMzIyNzkwNjcwOTk5OTAwMDAwMTU2NTM0NDI1ODQ3Mjc2MzE3ODZfIiBjeD0iNTYxLjgxNyIgY3k9IjQxNC4zOTI3IiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoMzUuODk0MyAwIDAgLTY1Ljk0NDUgLTE5NzgyLjYxNzIgMjc2OTAuODUxNikiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KCQkJCTxzdG9wICBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkZGRkY7c3RvcC1vcGFjaXR5OjAuODUiLz4KCQkJCTxzdG9wICBvZmZzZXQ9IjEiIHN0eWxlPSJzdG9wLWNvbG9yOiNGRkZGRkY7c3RvcC1vcGFjaXR5OjAiLz4KCQkJPC9yYWRpYWxHcmFkaWVudD4KCQkJPHBhdGggc3R5bGU9ImZpbGw6dXJsKCNTVkdJRF8wMDAwMDEzNzgyODAzMjI3OTA2NzA5OTk5MDAwMDAxNTY1MzQ0MjU4NDcyNzYzMTc4Nl8pOyIgZD0iTTM0Ny4xMjE5LDI2My43OWg1NTcuOTQ2M3YyNTAuMzE3NgoJCQkJSDM0Ny4xMjE5VjI2My43OXoiLz4KCQkJCgkJCQk8cmFkaWFsR3JhZGllbnQgaWQ9IlNWR0lEXzAwMDAwMDIxMTA3NDkyOTQ0NzcyMzA4NTIwMDAwMDAzMTg5MDU3MjIzMzE0NjY2OTM4XyIgY3g9IjU3Mi4zMDI1IiBjeT0iNDA5Ljg4OTIiIHI9IjAuOTg2OSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxMTYuNjU2NiAwIDAgLTEyNi44MTY0IC02NjE1MS44MjAzIDUyMzkyLjY2NDEpIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CgkJCQk8c3RvcCAgb2Zmc2V0PSIwIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowLjc4Ii8+CgkJCQk8c3RvcCAgb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowIi8+CgkJCTwvcmFkaWFsR3JhZGllbnQ+CgkJCTxwYXRoIHN0eWxlPSJmaWxsOnVybCgjU1ZHSURfMDAwMDAwMjExMDc0OTI5NDQ3NzIzMDg1MjAwMDAwMDMxODkwNTcyMjMzMTQ2NjY5MzhfKTsiIGQ9Ik0zNDcuMTIxOSwyNjMuNzloNTU3Ljk0NjN2MjUwLjMxNzYKCQkJCUgzNDcuMTIxOVYyNjMuNzl6Ii8+CgkJCQoJCQkJPHJhZGlhbEdyYWRpZW50IGlkPSJTVkdJRF8wMDAwMDA4NzM3MDg0NjMwMzE5MzQ0NDgxMDAwMDAwODY1MTEyNTIzNDkwNjM0OTk3M18iIGN4PSI1NjcuNTQwOCIgY3k9IjQxMC41NTE5IiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoNTguMzI4MyAwIDAgLTExMS41OTg1IC0zMjIxMC4xMzI4IDQ2MTk0Ljg5MDYpIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CgkJCQk8c3RvcCAgb2Zmc2V0PSIwIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowLjk1Ii8+CgkJCQk8c3RvcCAgb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojMTExMTExO3N0b3Atb3BhY2l0eTowIi8+CgkJCTwvcmFkaWFsR3JhZGllbnQ+CgkJCTxwYXRoIHN0eWxlPSJmaWxsOnVybCgjU1ZHSURfMDAwMDAwODczNzA4NDYzMDMxOTM0NDQ4MTAwMDAwMDg2NTExMjUyMzQ5MDYzNDk5NzNfKTsiIGQ9Ik0zNDcuMTIxOSwyNjMuNzloNTU3Ljk0NjN2MjUwLjMxNzYKCQkJCUgzNDcuMTIxOVYyNjMuNzl6Ii8+CgkJCQoJCQkJPHJhZGlhbEdyYWRpZW50IGlkPSJTVkdJRF8wMDAwMDA4NjY4MDA2MzM5MzAxNTIwMjc3MDAwMDAwMzUwNzM5OTQ1OTcxNzE1MDYxM18iIGN4PSI1NjguMDk1OCIgY3k9IjQxNC44NjQ0IiByPSIwLjk4NjkiIGdyYWRpZW50VHJhbnNmb3JtPSJtYXRyaXgoNjEuOTE3NyAwIDAgLTYyLjkwMSAtMzQzMTIuNjQ0NSAyNjU0MS4zODg3KSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgoJCQkJPHN0b3AgIG9mZnNldD0iMCIgc3R5bGU9InN0b3AtY29sb3I6I0ZGRkZGRjtzdG9wLW9wYWNpdHk6MC43Ii8+CgkJCQk8c3RvcCAgb2Zmc2V0PSIxIiBzdHlsZT0ic3RvcC1jb2xvcjojRkZGRkZGO3N0b3Atb3BhY2l0eTowIi8+CgkJCTwvcmFkaWFsR3JhZGllbnQ+CgkJCTxwYXRoIHN0eWxlPSJmaWxsOnVybCgjU1ZHSURfMDAwMDAwODY2ODAwNjMzOTMwMTUyMDI3NzAwMDAwMDM1MDczOTk0NTk3MTcxNTA2MTNfKTsiIGQ9Ik0zNDcuMTIxOSwyNjMuNzloNTU3Ljk0NjN2MjUwLjMxNzYKCQkJCUgzNDcuMTIxOVYyNjMuNzl6Ii8+CgkJCQoJCQkJPHJhZGlhbEdyYWRpZW50IGlkPSJTVkdJRF8wMDAwMDA4NzM5NjExMTE1MjAzODc0NzYxMDAwMDAxODA5MTYzODg0MjMzNTc3NjY4N18iIGN4PSI1NzIuOTE1IiBjeT0iNDE2LjEzNTMiIHI9IjAuOTg2OSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxMzQuNjAzOCAwIDAgLTU1Ljc5OTIgLTc2MzY0LjY1NjIgMjM3MzEuMTM0OCkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KCQkJCTxzdG9wICBvZmZzZXQ9IjAiIHN0eWxlPSJzdG9wLWNvbG9yOiNBQUFBQUE7c3RvcC1vcGFjaXR5OjAuNiIvPgoJCQkJPHN0b3AgIG9mZnNldD0iMSIgc3R5bGU9InN0b3AtY29sb3I6I0FBQUFBQTtzdG9wLW9wYWNpdHk6MCIvPgoJCQk8L3JhZGlhbEdyYWRpZW50PgoJCQk8cGF0aCBzdHlsZT0iZmlsbDp1cmwoI1NWR0lEXzAwMDAwMDg3Mzk2MTExMTUyMDM4NzQ3NjEwMDAwMDE4MDkxNjM4ODQyMzM1Nzc2Njg3Xyk7IiBkPSJNMzQ3LjEyMTksMjYzLjc5aDU1Ny45NDYzdjI1MC4zMTc2CgkJCQlIMzQ3LjEyMTlWMjYzLjc5eiIvPgoJCTwvZz4KCTwvZz4KPC9nPgo8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNDMgODcyKSBzY2FsZSgzLjg3MTIgMy44MSkgdHJhbnNsYXRlKC0zMzAuNTI5IC0zNjguODYzNSkiPgoJPHBhdGggc3R5bGU9ImZpbGw6IzI2MjYyNjsiIGQ9Ik0zMzAuNTI5LDM5NC4wOTk3aDAuODc3YzEuMDQ3LDAsMS44OTUtMC44NDgsMS44OTUtMS44OTV2LTEwLjY0N2MwLTEuMDQ2LTAuODQ4LTEuODk1LTEuODk1LTEuODk1CgkJaC0wLjg3N3YtMC41MDNoMy45MDFjMS4wNDcsMCwxLjg5NSwwLjg0OCwxLjg5NSwxLjg5NHYxLjg4NmgwLjA3MmMwLjUwNC0xLjQ0LDEuMjI5LTIuNDk2LDIuMTc4LTMuMTY4CgkJYzAuOTQ4LTAuNjcyLDIuMDk0LTEuMDA4LDMuNDM4LTEuMDA4YzEuMiwwLDIuMjYyLDAuMjY1LDMuMTg2LDAuNzkyYzAuOTIzLDAuNTI4LDEuNTMsMS40MDQsMS44MTgsMi42MjhoMC4wNzIKCQljMC4xNjgtMC40MzIsMC4zOTYtMC44NTIsMC42ODQtMS4yNmMwLjI4OC0wLjQwOCwwLjY0OC0wLjc3NCwxLjA4LTEuMDk4YzAuNDMyLTAuMzI0LDAuOTQyLTAuNTgxLDEuNTMtMC43NzQKCQljMC41ODctMC4xOTIsMS4yNTMtMC4yODgsMS45OTgtMC4yODhjMy41MDMsMCw1LjI1NiwxLjc4OCw1LjI1Niw1LjM2NHY4LjA3N2MwLDEuMDQ3LDAuODQ4LDEuODk1LDEuODk1LDEuODk1aDAuODc3djAuNTA0aC04LjY0CgkJdi0wLjUwNGgwLjg3N2MxLjA0NiwwLDEuODk1LTAuODQ4LDEuODk1LTEuODk1di0xMC4zNDVjMC0wLjgxNi0wLjIyMi0xLjQ1Mi0wLjY2Ni0xLjkwOGMtMC40NDUtMC40NTYtMS4wNTEtMC42ODQtMS44MTgtMC42ODQKCQljLTAuNiwwLTEuMiwwLjExNC0xLjgsMC4zNDJjLTAuNjAxLDAuMjI4LTEuMTQxLDAuNTctMS42MiwxLjAyNmMtMC40ODEsMC40NTYtMC44NywxLjA0NC0xLjE3LDEuNzY0CgkJYy0wLjMwMSwwLjcyLTAuNDUsMS41Ni0wLjQ1LDIuNTJ2Ny4yODVjMCwxLjA0NywwLjg0OCwxLjg5NSwxLjg5NCwxLjg5NWgwLjg3OHYwLjUwNGgtOC42NHYtMC41MDRoMC44NzcKCQljMS4wNDYsMCwxLjg5NS0wLjg0OCwxLjg5NS0xLjg5NXYtOS44NDFjMC0xLjA1Ni0wLjIxNi0xLjgzNi0wLjY0OC0yLjM0Yy0wLjQzMi0wLjUwNC0xLjAwOC0wLjc1Ni0xLjcyOC0wLjc1NgoJCWMtMC41MDQsMC0xLjA1NywwLjEyNi0xLjY1NiwwLjM3OGMtMC42LDAuMjUyLTEuMTU4LDAuNjQ4LTEuNjc0LDEuMTg4Yy0wLjUxNywwLjUzOS0wLjk0OSwxLjI0Mi0xLjI5NiwyLjEwNgoJCWMtMC4zNDgsMC44NjQtMC41MjIsMS45MjEtMC41MjIsMy4xNjh2Ni4wOTdjMCwxLjA0NywwLjg0OCwxLjg5NSwxLjg5NCwxLjg5NWgwLjg3OHYwLjUwNGgtOC42NFYzOTQuMDk5N3oiLz4KCTxwYXRoIHN0eWxlPSJmaWxsOiMyNjI2MjY7IiBkPSJNMzY5Ljk0ODksMzg2Ljg5OTVjMCwxLjcwNCwwLjEzMSwzLjA2MSwwLjM5Niw0LjA2OGMwLjI2NCwxLjAwOCwwLjYxMiwxLjc4MywxLjA0NCwyLjMyMgoJCWMwLjQzMiwwLjU0LDAuOTM2LDAuODk0LDEuNTEyLDEuMDYyYzAuNTc2LDAuMTY4LDEuMTg4LDAuMjUyLDEuODM2LDAuMjUyYzAuNjQ4LDAsMS4yNi0wLjA4NCwxLjgzNi0wLjI1MgoJCWMwLjU3Ni0wLjE2OCwxLjA4LTAuNTIyLDEuNTEyLTEuMDYyYzAuNDMyLTAuNTM5LDAuNzgtMS4zMTQsMS4wNDQtMi4zMjJjMC4yNjMtMS4wMDcsMC4zOTYtMi4zNjQsMC4zOTYtNC4wNjgKCQljMC0xLjQzOS0wLjA5Ny0yLjY0Ni0wLjI4OC0zLjYxOGMtMC4xOTMtMC45NzItMC40ODYtMS43NjQtMC44ODItMi4zNzZjLTAuMzk2LTAuNjExLTAuODk1LTEuMDUtMS40OTQtMS4zMTQKCQljLTAuNi0wLjI2My0xLjMwOC0wLjM5Ni0yLjEyNC0wLjM5NmMtMC44MTYsMC0xLjUyNSwwLjEzMy0yLjEyNCwwLjM5NmMtMC42MDEsMC4yNjQtMS4wOTgsMC43MDMtMS40OTQsMS4zMTQKCQljLTAuMzk2LDAuNjEyLTAuNjkxLDEuNDA0LTAuODgyLDIuMzc2QzM3MC4wNDM5LDM4NC4yNTM1LDM2OS45NDg5LDM4NS40NjA1LDM2OS45NDg5LDM4Ni44OTk1IE0zNjYuMzQ4OSwzODYuODk5NQoJCWMwLTEuMTc2LDAuMjU3LTIuMjY4LDAuNzc0LTMuMjc2YzAuNTE1LTEuMDA4LDEuMTc2LTEuODc3LDEuOTgtMi42MWMwLjgwNC0wLjczMiwxLjcwMy0xLjMwMSwyLjctMS43MQoJCWMwLjk5Ni0wLjQwOCwxLjk3NC0wLjYxMiwyLjkzNC0wLjYxMmMwLjk2LDAsMS45MzgsMC4yMDQsMi45MzQsMC42MTJjMC45OTUsMC40MDksMS44OTUsMC45NzgsMi43LDEuNzEKCQljMC44MDQsMC43MzMsMS40NjMsMS42MDIsMS45OCwyLjYxYzAuNTE1LDEuMDA4LDAuNzc0LDIuMSwwLjc3NCwzLjI3NmMwLDEuMTI5LTAuMjQsMi4xOS0wLjcyLDMuMTg3CgkJYy0wLjQ4LDAuOTk2LTEuMTExLDEuODY2LTEuODksMi42MDljLTAuNzgsMC43NDQtMS42NzQsMS4zMzItMi42ODIsMS43NjVjLTEuMDA4LDAuNDMxLTIuMDQsMC42NDctMy4wOTYsMC42NDcKCQljLTEuMDU3LDAtMi4wODgtMC4yMTYtMy4wOTYtMC42NDdjLTEuMDA4LTAuNDMzLTEuOTAyLTEuMDIxLTIuNjgyLTEuNzY1Yy0wLjc4MS0wLjc0My0xLjQxLTEuNjEzLTEuODktMi42MDkKCQlDMzY2LjU4ODksMzg5LjA4OTUsMzY2LjM0ODksMzg4LjAyODUsMzY2LjM0ODksMzg2Ljg5OTUiLz4KCTxwYXRoIHN0eWxlPSJmaWxsOiMyNjI2MjY7IiBkPSJNMzg5LjMxNywzOTQuMDk5N2gwLjg3N2MxLjA0NywwLDEuODk1LTAuODQ4LDEuODk1LTEuODk1di0xMC42NDdjMC0xLjA0Ni0wLjg0OC0xLjg5NS0xLjg5NS0xLjg5NQoJCWgtMC44Nzd2LTAuNTAzaDMuOTAxYzEuMDQ3LDAsMS44OTUsMC44NDgsMS44OTUsMS44OTR2MS43NDJoMC4wNzJjMC4wOTUtMC4zNiwwLjI1Mi0wLjc2OCwwLjQ2OC0xLjIyNAoJCWMwLjIxNi0wLjQ1NSwwLjUxNi0wLjg5NCwwLjktMS4zMTRjMC4zODQtMC40MiwwLjg0Ni0wLjc3NCwxLjM4Ni0xLjA2MmMwLjU0LTAuMjg4LDEuMTkzLTAuNDMyLDEuOTYyLTAuNDMyCgkJYzAuNTUyLDAsMS4wMzEsMC4wOSwxLjQ0LDAuMjdjMC40MDgsMC4xOCwwLjc0NCwwLjQwOCwxLjAwOCwwLjY4NGMwLjI2MywwLjI3NywwLjQ1NSwwLjU5NCwwLjU3NiwwLjk1NAoJCWMwLjEyLDAuMzYsMC4xOCwwLjcyLDAuMTgsMS4wOGMwLDAuNzkyLTAuMTgsMS4zMi0wLjU0LDEuNTg0Yy0wLjM2LDAuMjY0LTAuNzgsMC4zOTYtMS4yNiwwLjM5NmMtMS4wNTYsMC0xLjU4NC0wLjMzNi0xLjU4NC0xLjAwOAoJCWMwLTAuMjE2LDAuMDIzLTAuMzksMC4wNzItMC41MjJjMC4wNDctMC4xMzEsMC4xMDItMC4yNjQsMC4xNjItMC4zOTZjMC4wNTktMC4xMzIsMC4xMTMtMC4yODIsMC4xNjItMC40NQoJCWMwLjA0OC0wLjE2OCwwLjA3Mi0wLjQwOCwwLjA3Mi0wLjcyYzAtMC43NjctMC40Mi0xLjE1Mi0xLjI2LTEuMTUyYy0wLjM4NCwwLTAuNzkyLDAuMTQ0LTEuMjI0LDAuNDMxCgkJYy0wLjQzMiwwLjI4OS0wLjgzNCwwLjcwOS0xLjIwNiwxLjI2MXMtMC42ODQsMS4yMTgtMC45MzYsMS45OThjLTAuMjUyLDAuNzgtMC4zNzgsMS42NzQtMC4zNzgsMi42ODJ2Ni4zNDkKCQljMCwxLjA0NywwLjg0OCwxLjg5NSwxLjg5NCwxLjg5NWgxLjIzOHYwLjUwNGgtOVYzOTQuMDk5N3oiLz4KCTxwYXRoIHN0eWxlPSJmaWxsOiMyNjI2MjY7IiBkPSJNNDIwLjI2ODIsMzg1LjE3MTljMC4wNDgtMC4zMzYsMC4wNzItMC42NDgsMC4wNzItMC45Mzd2LTAuODk5YzAtMC44MTYtMC4wNzgtMS40ODgtMC4yMzQtMi4wMTcKCQljLTAuMTU2LTAuNTI3LTAuMzcyLTAuOTQ3LTAuNjQ4LTEuMjU5cy0wLjYxMi0wLjUzNC0xLjAwOC0wLjY2NmMtMC4zOTYtMC4xMzItMC44MjItMC4xOTktMS4yNzgtMC4xOTkKCQljLTAuODE2LDAtMS40ODgsMC4xNjMtMi4wMTYsMC40ODdjLTAuNTI4LDAuMzI0LTAuOTQ4LDAuNzYxLTEuMjYsMS4zMTNjLTAuMzEyLDAuNTUzLTAuNTQ2LDEuMTg5LTAuNzAyLDEuOTA4bC0wLjAwNCwwLjAyMgoJCWMtMC4yNTEsMS4xNjEsMC42NzQsMi4yNDcsMS44NjIsMi4yNDdINDIwLjI2ODJ6IE00MTIuODUyMiwzODUuNjc1OWMwLDAuMjQtMC4wMDYsMC40ODUtMC4wMTgsMC43MzdzLTAuMDE4LDAuNTcxLTAuMDE4LDAuOTU0CgkJYzAsMC43OTIsMC4wNDgsMS42MiwwLjE0NCwyLjQ4NWMwLjA5NiwwLjg2NCwwLjMwNiwxLjY0NCwwLjYzLDIuMzRjMC4zMjQsMC42OTYsMC44MDQsMS4yNzIsMS40NCwxLjcyOAoJCWMwLjYzNiwwLjQ1NiwxLjQ4MiwwLjY4NCwyLjUzOCwwLjY4NHMxLjkyNi0wLjE1NywyLjYxLTAuNDY4YzAuNjg0LTAuMzEyLDEuMjI0LTAuNjksMS42Mi0xLjEzNAoJCWMwLjM5Ni0wLjQ0NCwwLjY5LTAuODk0LDAuODgyLTEuMzUxYzAuMTkyLTAuNDU1LDAuMzM2LTAuODI4LDAuNDMyLTEuMTE2bDAuNTQsMC4xMDljLTAuMDcyLDAuMjY0LTAuMjEsMC42NDItMC40MTQsMS4xMzMKCQljLTAuMjA0LDAuNDkzLTAuNTI4LDAuOTg1LTAuOTcyLDEuNDc3cy0xLjA0NCwwLjkyNC0xLjgsMS4yOTZjLTAuNzU2LDAuMzcxLTEuNzM0LDAuNTU4LTIuOTM0LDAuNTU4Yy0xLjIsMC0yLjMxLTAuMTkzLTMuMzMtMC41NzcKCQljLTEuMDItMC4zODMtMS45MDItMC45MzUtMi42NDYtMS42NTVjLTAuNzQ0LTAuNzIxLTEuMzItMS41NzgtMS43MjgtMi41NzRjLTAuNDA4LTAuOTk2LTAuNjEyLTIuMTA3LTAuNjEyLTMuMzMKCQljMC0xLjA1NiwwLjIxLTIuMDgyLDAuNjMtMy4wNzhjMC40Mi0wLjk5NiwwLjk5Ni0xLjg3OCwxLjcyOC0yLjY0N2MwLjczMi0wLjc2NywxLjU5LTEuMzg2LDIuNTc0LTEuODUzCgkJYzAuOTg0LTAuNDY4LDIuMDQtMC43MDIsMy4xNjgtMC43MDJjMC42NzIsMCwxLjM5MiwwLjEyLDIuMTYsMC4zNmMwLjc2OCwwLjI0LDEuNDgyLDAuNjMsMi4xNDIsMS4xNwoJCWMwLjY2LDAuNTQsMS4yMTIsMS4yNTQsMS42NTYsMi4xNDFjMC4xMzMsMC4yNjcsMC4yNDcsMC41NTMsMC4zNCwwLjg1OWMwLjM3MiwxLjIxNy0wLjU0NiwyLjQ1NC0xLjgxOSwyLjQ1NEg0MTIuODUyMnoiLz4KCTxwYXRoIHN0eWxlPSJmaWxsOiMyNjI2MjY7IiBkPSJNNDQzLjQxNjIsMzc5LjE1OTJoMC44NzdjMS4wNDcsMCwxLjg5NS0wLjg0OCwxLjg5NS0xLjg5NXYtMi43NDkKCQljMC4xOTIsMC4wNzMsMC4zNzIsMC4xMzIsMC41NCwwLjE4YzAuMTY4LDAuMDQ5LDAuNDU2LDAuMDcyLDAuODY0LDAuMDcyYzAuMzYsMCwwLjY3Mi0wLjA0MiwwLjkzNi0wLjEyNgoJCWMwLjI2NC0wLjA4NCwwLjUxNi0wLjIyMSwwLjc1Ni0wLjQxNHYzLjAzN2MwLDEuMDQ3LDAuODQ4LDEuODk1LDEuODk1LDEuODk1aDMuMjE3djAuNTA0aC0zLjIxN2MtMS4wNDcsMC0xLjg5NSwwLjg0OC0xLjg5NSwxLjg5NQoJCXY5Ljg3N2MwLDAuNjcyLDAuMDY2LDEuMjE5LDAuMTk4LDEuNjM4YzAuMTMyLDAuNDIxLDAuMzA2LDAuNzQ0LDAuNTIyLDAuOTczYzAuMjE2LDAuMjI3LDAuNDUsMC4zNzgsMC43MDIsMC40NDkKCQljMC4yNTIsMC4wNzIsMC40OTgsMC4xMDgsMC43MzgsMC4xMDhjMC44NCwwLDEuNTE4LTAuMzA1LDIuMDM0LTAuOTE4YzAuNTE2LTAuNjEyLDAuODQ2LTEuMzE0LDAuOTktMi4xMDZsMC41MDQsMC4xODEKCQljLTAuMDcyLDAuMzExLTAuMTgsMC42Ni0wLjMyNCwxLjA0NGMtMC4xNDQsMC4zODMtMC4zNjYsMC43NS0wLjY2NiwxLjA5N2MtMC4zLDAuMzQ5LTAuNjksMC42MzctMS4xNywwLjg2NAoJCWMtMC40OCwwLjIyOC0xLjA4LDAuMzQyLTEuOCwwLjM0MmMtMS44LDAtMy4wNTQtMC4zNDctMy43NjItMS4wNDRjLTAuNzA4LTAuNjk1LTEuMDYyLTEuNjc5LTEuMDYyLTIuOTUydi05LjU1MwoJCWMwLTEuMDQ3LTAuODQ4LTEuODk1LTEuODk1LTEuODk1aC0wLjg3N1YzNzkuMTU5MnoiLz4KCTxwYXRoIHN0eWxlPSJmaWxsOiMyNjI2MjY7IiBkPSJNNDY0LjY0MDQsMzcwLjc3MTVjMC0wLjUyNywwLjE4Ni0wLjk3OCwwLjU1OC0xLjM1czAuODIyLTAuNTU4LDEuMzUtMC41NTgKCQljMC41MjgsMCwwLjk3NywwLjE4NiwxLjM1LDAuNTU4YzAuMzcyLDAuMzcyLDAuNTU4LDAuODIzLDAuNTU4LDEuMzVjMCwwLjUyOC0wLjE4NiwwLjk3OS0wLjU1OCwxLjM1CgkJYy0wLjM3MywwLjM3My0wLjgyMiwwLjU1OC0xLjM1LDAuNTU4Yy0wLjUyOCwwLTAuOTc4LTAuMTg1LTEuMzUtMC41NThDNDY0LjgyNjQsMzcxLjc1MDUsNDY0LjY0MDQsMzcxLjI5OTUsNDY0LjY0MDQsMzcwLjc3MTUKCQkgTTQ2Mi4zMDA0LDM5NC4wOTk1aDAuODc3YzEuMDQ2LDAsMS44OTUtMC44NDgsMS44OTUtMS44OTR2LTEwLjY0OGMwLTEuMDQ2LTAuODQ5LTEuODk0LTEuODk1LTEuODk0aC0wLjg3N3YtMC41MDRoMy45NzMKCQljMS4wNDcsMCwxLjg5NSwwLjg0OCwxLjg5NSwxLjg5NHYxMS4xNTJjMCwxLjA0NiwwLjg0OCwxLjg5NCwxLjg5NCwxLjg5NGgwLjg3OHYwLjUwNGgtOC42NFYzOTQuMDk5NXoiLz4KCTxwYXRoIHN0eWxlPSJmaWxsOiMyNjI2MjY7IiBkPSJNNDc3Ljk2ODMsMzk0LjA5OTdoMC44NzdjMS4wNDcsMCwxLjg5NS0wLjg0OCwxLjg5NS0xLjg5NXYtMTAuNjQ3YzAtMS4wNDYtMC44NDgtMS44OTUtMS44OTUtMS44OTUKCQloLTAuODc3di0wLjUwM2gzLjkwMWMxLjA0NywwLDEuODk1LDAuODQ4LDEuODk1LDEuODk0djEuODg2aDAuMDcyYzAuNTA0LTEuNDQsMS4yMjktMi40OTYsMi4xNzgtMy4xNjgKCQljMC45NDgtMC42NzIsMi4wOTQtMS4wMDgsMy40MzgtMS4wMDhjMS4yLDAsMi4yNjIsMC4yNjUsMy4xODYsMC43OTJjMC45MjMsMC41MjgsMS41MywxLjQwNCwxLjgxOCwyLjYyOGgwLjA3MgoJCWMwLjE2OC0wLjQzMiwwLjM5Ni0wLjg1MiwwLjY4NC0xLjI2YzAuMjg4LTAuNDA4LDAuNjQ4LTAuNzc0LDEuMDgtMS4wOThjMC40MzItMC4zMjQsMC45NDItMC41ODEsMS41My0wLjc3NAoJCWMwLjU4Ny0wLjE5MiwxLjI1My0wLjI4OCwxLjk5OC0wLjI4OGMzLjUwMywwLDUuMjU2LDEuNzg4LDUuMjU2LDUuMzY0djguMDc3YzAsMS4wNDcsMC44NDgsMS44OTUsMS44OTUsMS44OTVoMC44Nzd2MC41MDRoLTguNjQKCQl2LTAuNTA0aDAuODc3YzEuMDQ2LDAsMS44OTUtMC44NDgsMS44OTUtMS44OTV2LTEwLjM0NWMwLTAuODE2LTAuMjIyLTEuNDUyLTAuNjY2LTEuOTA4Yy0wLjQ0NS0wLjQ1Ni0xLjA1MS0wLjY4NC0xLjgxOC0wLjY4NAoJCWMtMC42LDAtMS4yLDAuMTE0LTEuOCwwLjM0MmMtMC42MDEsMC4yMjgtMS4xNDEsMC41Ny0xLjYyLDEuMDI2Yy0wLjQ4MSwwLjQ1Ni0wLjg3LDEuMDQ0LTEuMTcsMS43NjQKCQljLTAuMzAxLDAuNzItMC40NSwxLjU2LTAuNDUsMi41MnY3LjI4NWMwLDEuMDQ3LDAuODQ4LDEuODk1LDEuODk0LDEuODk1aDAuODc4djAuNTA0aC04LjY0di0wLjUwNGgwLjg3NwoJCWMxLjA0NiwwLDEuODk1LTAuODQ4LDEuODk1LTEuODk1di05Ljg0MWMwLTEuMDU2LTAuMjE2LTEuODM2LTAuNjQ4LTIuMzRjLTAuNDMyLTAuNTA0LTEuMDA4LTAuNzU2LTEuNzI4LTAuNzU2CgkJYy0wLjUwNCwwLTEuMDU3LDAuMTI2LTEuNjU2LDAuMzc4Yy0wLjYsMC4yNTItMS4xNTgsMC42NDgtMS42NzQsMS4xODhjLTAuNTE3LDAuNTM5LTAuOTQ5LDEuMjQyLTEuMjk2LDIuMTA2CgkJYy0wLjM0OCwwLjg2NC0wLjUyMiwxLjkyMS0wLjUyMiwzLjE2OHY2LjA5N2MwLDEuMDQ3LDAuODQ4LDEuODk1LDEuODk0LDEuODk1aDAuODc4djAuNTA0aC04LjY0VjM5NC4wOTk3eiIvPgoJPHBhdGggc3R5bGU9ImZpbGw6IzI2MjYyNjsiIGQ9Ik01MjQuOTM5NCwzODUuMTcxOWMwLjA0OC0wLjMzNiwwLjA3Mi0wLjY0OCwwLjA3Mi0wLjkzN3YtMC44OTljMC0wLjgxNi0wLjA3OC0xLjQ4OC0wLjIzNC0yLjAxNwoJCWMtMC4xNTYtMC41MjctMC4zNzItMC45NDctMC42NDgtMS4yNTlzLTAuNjEyLTAuNTM0LTEuMDA4LTAuNjY2Yy0wLjM5Ni0wLjEzMi0wLjgyMi0wLjE5OS0xLjI3OC0wLjE5OQoJCWMtMC44MTYsMC0xLjQ4OCwwLjE2My0yLjAxNiwwLjQ4N2MtMC41MjgsMC4zMjQtMC45NDgsMC43NjEtMS4yNiwxLjMxM2MtMC4zMTIsMC41NTMtMC41NDYsMS4xODktMC43MDIsMS45MDgKCQljLTAuMDAxLDAuMDA4LTAuMDAzLDAuMDE1LTAuMDA0LDAuMDIyYy0wLjI1MSwxLjE2MSwwLjY3NCwyLjI0NywxLjg2MiwyLjI0N0g1MjQuOTM5NHogTTUxNy41MjM0LDM4NS42NzU5CgkJYzAsMC4yNC0wLjAwNiwwLjQ4NS0wLjAxOCwwLjczN2MtMC4wMTIsMC4yNTItMC4wMTgsMC41NzEtMC4wMTgsMC45NTRjMCwwLjc5MiwwLjA0OCwxLjYyLDAuMTQ0LDIuNDg1CgkJYzAuMDk2LDAuODY0LDAuMzA2LDEuNjQ0LDAuNjMsMi4zNGMwLjMyNCwwLjY5NiwwLjgwNCwxLjI3MiwxLjQ0LDEuNzI4YzAuNjM2LDAuNDU2LDEuNDgyLDAuNjg0LDIuNTM4LDAuNjg0CgkJYzEuMDU2LDAsMS45MjYtMC4xNTcsMi42MS0wLjQ2OGMwLjY4NC0wLjMxMiwxLjIyNC0wLjY5LDEuNjItMS4xMzRzMC42OS0wLjg5NCwwLjg4Mi0xLjM1MWMwLjE5Mi0wLjQ1NSwwLjMzNi0wLjgyOCwwLjQzMTktMS4xMTYKCQlsMC41NCwwLjEwOWMtMC4wNzIsMC4yNjQtMC4yMSwwLjY0Mi0wLjQxNCwxLjEzM2MtMC4yMDQsMC40OTMtMC41MjgsMC45ODUtMC45NzIsMS40NzdjLTAuNDQ0LDAuNDkyLTEuMDQ0LDAuOTI0LTEuOCwxLjI5NgoJCWMtMC43NTYsMC4zNzEtMS43MzQsMC41NTgtMi45MzQsMC41NThjLTEuMiwwLTIuMzEtMC4xOTMtMy4zMy0wLjU3N2MtMS4wMi0wLjM4My0xLjkwMi0wLjkzNS0yLjY0Ni0xLjY1NQoJCWMtMC43NDQtMC43MjEtMS4zMi0xLjU3OC0xLjcyOC0yLjU3NGMtMC40MDgtMC45OTYtMC42MTItMi4xMDctMC42MTItMy4zM2MwLTEuMDU2LDAuMjEtMi4wODIsMC42My0zLjA3OAoJCWMwLjQyLTAuOTk2LDAuOTk2LTEuODc4LDEuNzI4LTIuNjQ3YzAuNzMyLTAuNzY3LDEuNTktMS4zODYsMi41NzQtMS44NTNjMC45ODQtMC40NjgsMi4wNC0wLjcwMiwzLjE2OC0wLjcwMgoJCWMwLjY3MiwwLDEuMzkyLDAuMTIsMi4xNiwwLjM2YzAuNzY4LDAuMjQsMS40ODIsMC42MywyLjE0MiwxLjE3YzAuNjYsMC41NCwxLjIxMiwxLjI1NCwxLjY1NiwyLjE0MQoJCWMwLjEzMywwLjI2NywwLjI0NjksMC41NTMsMC4zNCwwLjg1OWMwLjM3MiwxLjIxNy0wLjU0NiwyLjQ1NC0xLjgxOSwyLjQ1NEg1MTcuNTIzNHoiLz4KPC9nPgo8L3N2Zz4K';
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(.9, .6), std({ map: t, roughness: 1 })); m.rotation.x = -Math.PI / 2; m.rotation.z = Math.PI; m.position.set(4.07, .004, .50); m.receiveShadow = true; add(m); }
+// 鍵付き書類ボックス（白・サンワダイレクト 100-LBOX006W を想定、W350×D350×H350 を2段重ね）：ロッカーの右どなり
+{ const g = new THREE.Group(); g.position.set(3.94, 0, D - .20); add(g);
+  for (let k = 0; k < 2; k++) { part(g, .35, .345, .35, std({ color: '#ecebe6', roughness: .5, metalness: .15 }), 0, .175 + k * .35, 0, .008); part(g, .31, .30, .01, mLockDoor, 0, .175 + k * .35, -.178); cyl(g, .012, .01, mAlu, .11, .175 + k * .35, -.186, 12).rotation.x = Math.PI / 2; }
+  sh(g); blob(3.94, D - .28, .6, .7, .7); }
+// 棚の上＝コーヒーコーナー：ウォーターサーバー（卓上・黒 W250×D295×H470）、カプセル式コーヒーメーカー（黒 W180×D318×H300）、マグ×6、カトラリー、ディフューザー
+{ const y = 1.075, g = new THREE.Group(); add(g); g.position.x = SHELF_DX;
+  box(.68, .93, y, y + .47, .07, .365, mDark, g, .02); box(.74, .87, y + .14, y + .30, .365, .37, std({ color: '#0d0e0f', roughness: .2 }), g); box(.74, .87, y, y + .012, .365, .40, mDark, g);
+  cyl(g, .05, .012, mAlu, .805, y + .476, .2, 20);
+  box(1.00, 1.18, y, y + .30, .07, .388, mDark, g, .02); box(1.03, 1.15, y + .11, y + .19, .388, .40, mDark, g); box(1.02, 1.16, y, y + .015, .388, .42, mDark, g); cyl(g, .035, .09, mWhite, 1.09, y + .06, .40, 16, .03);
+  cyl(g, .045, .13, mWhite, 1.70, y + .065, .30, 18); for (let k = 0; k < 7; k++) { const c = cyl(g, .003, .19, mAlu, 1.70 + rr(-.02, .02), y + .15, .30 + rr(-.02, .02), 6); c.rotation.set(rr(-.12, .12), 0, rr(-.12, .12)); }   // カトラリースタンド
+  cyl(g, .05, .14, mDark, 1.82, y + .07, .16, 20, .038); cyl(g, .012, .012, mAlu, 1.82, y + .146, .16, 10);  // アロマディフューザー（黒）
+  sh(g); }
+// 洗面：液体石鹸ディスペンサー（白）と、トイレ用の白いリードディフューザー
+{ const g = new THREE.Group(); add(g);
+  box(5.71, 5.78, .84, .98, 3.80, 3.87, mWhite, g, .008); cyl(g, .008, .05, mAlu, 5.745, 1.005, 3.835, 10); part(g, .012, .012, .06, mAlu, 5.745, 1.03, 3.86);
+  cyl(g, .035, .09, mWhite, 6.02, .885, 3.84, 18, .04); for (let k = 0; k < 6; k++) { const c = cyl(g, .002, .22, std({ color: '#d8cdb8', roughness: .9 }), 6.02, 1.03, 3.84, 5); c.rotation.set(rr(-.25, .25), 0, rr(-.25, .25)); }
+  sh(g); }
+// プロジェクター（天吊り・XGIMI HORIZON 20 Max を想定）と投影イメージ（約110インチ）。白壁のときだけ表示
+const projG = new THREE.Group(); add(projG);
+{ const px = 2.95, pz = 2.55;
+  cyl(projG, .018, H - 2.36, mDark, px, (H + 2.36) / 2, pz, 12); part(projG, .14, .012, .14, mDark, px, H - .006, pz); part(projG, .20, .01, .20, mDark, px, 2.36, pz);
+  part(projG, .27, .17, .25, std({ color: '#3a3733', roughness: .45, metalness: .4 }), px, 2.27, pz, .02);
+  const lens = cyl(projG, .045, .02, std({ color: '#0a0a0b', roughness: .1, metalness: .6 }), px - .14, 2.27, pz, 20); lens.rotation.z = Math.PI / 2;
+}
+// HomePod ×2（ホワイト）＋白いスピーカースタンド：アートの左右
+for (const z of [1.28, 3.84]) { const g = new THREE.Group(); g.position.set(.30, 0, z); add(g);
+  cyl(g, .12, .012, mWhite, 0, .006, 0, 24); cyl(g, .014, .78, mWhite, 0, .40, 0, 10); cyl(g, .075, .008, mWhite, 0, .794, 0, 20);
+  const hp = new THREE.Mesh(new THREE.SphereGeometry(.086, 28, 20), std({ color: '#f1f0ec', roughness: .85 })); hp.scale.y = .98; hp.position.y = .88; g.add(hp);
+  cyl(g, .05, .004, std({ color: '#dcdcd8', roughness: .15 }), 0, .966, 0, 20); sh(g); blob(.30, z, .4, .4, .6); }
+// スタンドライト ×2：gram eight「LED バーライト ネオマンクス たて置きベースセット」（ホワイト・直径25.5mmのバー・高さ約1.22m・約10cm角の大理石ベース）。白壁の両端（観葉植物の脇）で壁を照らす
+for (const z of [.93, 4.86]) { const g = new THREE.Group(); g.position.set(.08, 0, z); add(g);   // 白壁の両端、観葉植物のすぐ脇（壁と柱の角）
+  part(g, .10, .07, .10, std({ color: '#121213', roughness: .25, metalness: .1 }), 0, .035, 0, .004);
+  cyl(g, .0128, 1.15, mWhite, 0, .07 + .575, 0, 14);
+  part(g, .004, 1.10, .016, new THREE.MeshBasicMaterial({ color: '#ffe2b8' }), -.0125, .07 + .575, 0).castShadow = false;
+  const pl = new THREE.PointLight('#ffd3a0', 1.3, 2.4, 2); pl.position.set(-.04, .75, 0); g.add(pl);
+  sh(g); }
+// 掛け時計（白・直径30cm）：棚の上の壁
+{ const g = new THREE.Group(); g.position.set(1.27, 1.90, .012); add(g);
+  const f = cyl(g, .15, .03, mWhite, 0, 0, .015, 40); f.rotation.x = Math.PI / 2; const d = cyl(g, .138, .002, std({ color: '#fbfaf7', roughness: .6 }), 0, 0, .031, 40); d.rotation.x = Math.PI / 2;
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; part(g, .006, .024, .002, mDark, Math.sin(a) * .118, Math.cos(a) * .118, .033).rotation.z = -a; }
+  const hh = part(g, .008, .075, .002, mDark, .026, .026, .034); hh.rotation.z = -Math.PI / 4; const mh = part(g, .006, .11, .002, mDark, -.045, .028, .035); mh.rotation.z = 1.02; }
+// 壁の絵（黒フレーム 50×70cm ×3・中心の高さ1.45m・抽象画のイメージ）：白壁（鏡を外したあとの壁）に3枚。絵柄は仮
+[1.75, 2.55, 3.35].forEach((z, i) => {
+  const [c, x] = canvas(450, 600); x.fillStyle = ['#d9d2c4', '#cfc6b6', '#ddd6ca'][i]; x.fillRect(0, 0, 450, 600);
+  const cols = [['#2f3a40', '#b5713f', '#e9e2d3'], ['#8a8f86', '#2a2a2b', '#c98f5a'], ['#3d4a45', '#d8b98e', '#262a2e']][i];
+  x.fillStyle = cols[0]; x.beginPath(); x.arc(150 + i * 60, 230, 120, 0, 7); x.fill(); x.fillStyle = cols[1]; x.fillRect(210 - i * 40, 300, 190, 230); x.fillStyle = cols[2]; x.beginPath(); x.moveTo(60, 560); x.lineTo(260 + i * 30, 330); x.lineTo(330, 560); x.fill(); grain(x, 450, 600, 12);
+  box(.02, .052, 1.08, 1.82, z - .27, z + .27, mDark, projG); const a = new THREE.Mesh(new THREE.PlaneGeometry(.50, .70), std({ map: tex(c, 1, 1), roughness: .8 })); a.rotation.y = Math.PI / 2; a.position.set(.054, 1.45, z); projG.add(a); });
+box(1.59, 1.84, .72, .735, .30, .48, std({ color: '#2a2c2e', roughness: .4, metalness: .5 }));              // ノートPC
+{ const m = box(1.59, 1.84, .735, .90, .30, .305, std({ color: '#2a2c2e', roughness: .4, metalness: .5 })); m.rotation.x = .18; }
 
 // 備品名の札
-tag('会議テーブル 2700×1000（購入済）', 2.62, .95, 2.54); tag('ミーティングチェア ×6（組立済）', 1.82, 1.15, 1.75);
-tag('デスク 1400×700（購入済）', 2.64, .95, .38); tag('冷蔵庫・黒（設置済）＋電子レンジ（予定）', W - .35, 1.65, .7);
+tag('会議テーブル 2700×1000（購入済）', 2.62, .95, 2.54); tag('COX DESK CHAIR ×6（組立済）', 1.82, 1.15, 1.75);
+tag('デスク 1400×700（購入済）', 1.28, .95, .38); tag('冷蔵庫・黒（設置済）＋電子レンジ（予定）', W - .35, 1.65, .7);
 tag('ロッカー 8人用 ×3（納品済・組立前）', 2.36, 1.95, D - .3); tag('ローカウンター（造作）＋モニター ×3（未購入）', W - .25, 1.35, 2.09);
-tag('アーロンチェア ×3', W - .8, 1.2, 2.76); tag('ベンチ 1500×300（KANADEMONO 候補）', 2.42, .7, 4.33); tag('棚（テーブルと同じ板）', 1.27, 1.95, .25); tag('ラグ ベージュ 3.6×2.6m（提案）', 1.2, .15, 3.6);
-tag('プランター', .5, 1.6, .8); tag('白壁（鏡は撤去予定・投影面）', .05, 1.9, 2.9);
+tag('アーロンチェア ×3', W - .8, 1.2, 2.76); tag('ベンチ 1500×300（KANADEMONO 候補）', 2.42, .7, 4.33); tag('棚 THE STORAGE SHELF 4段（KANADEMONO 候補）', 2.67, 1.75, .25); tag('ラグ 東リ グレース ライトグレー 3.6×2.6m（候補）', 1.2, .15, 3.6);
+tag('プランター', .27, 1.6, .62); tag('白壁（鏡は撤去予定）', .05, 2.2, 3.9);
 tag('洗面・トイレ（既存）', 4.5, 2.25, 4.4);
+tag('プロジェクター 天吊り（XGIMI HORIZON 20 Max 候補）', 2.95, 2.1, 2.55); tag('HomePod ×2＋スタンド（候補）', .3, 1.1, 3.84); tag('スタンドライト ×2（gram eight ネオマンクス）', .08, 1.4, 4.86);
+tag('コーヒーコーナー：ウォーターサーバー・コーヒーメーカー', 2.3, 1.45, .25); tag('掛け時計', 1.27, 2.1, .05);
+tag('壁の絵 50×70 ×3（INDOORPLUS 候補）', .06, 1.95, 2.55); tag('鍵付き書類ボックス 白 ×2（候補）', 3.94, .95, D - .3);
+tag('玄関マット MORE TIME ロゴ入り（候補）', 4.07, .15, .5); tag('傘立て', 4.72, .7, .16); tag('空気清浄機（BALMUDA The Pure 候補）', 5.06, .95, .19); tag('ゴミ箱 ×3・ティッシュケース ×3（山崎実業 候補）', 3.5, .55, .34);
 
 // ============================================================
 // 仕上げ：室内の反射（間接光のかわり）、視点、操作
@@ -637,29 +770,54 @@ if (MOBILE) document.getElementById('hint').textContent = '1本指で見回す �
 const tagBox = document.getElementById('tags'); let showTags = false;
 const tagEls = tags.map(t => { const d = document.createElement('div'); d.className = 'tag'; d.textContent = t.text; d.style.display = 'none'; tagBox.appendChild(d); return d; });
 const bScreen = document.getElementById('bScreen'), bTags = document.getElementById('bTags'), bList = document.getElementById('bList'), list = document.getElementById('list');
-bScreen.onclick = () => { mirrorG.visible = !mirrorG.visible; whiteWall.visible = !mirrorG.visible; bScreen.classList.toggle('on', mirrorG.visible); };
+bScreen.onclick = () => { mirrorG.visible = !mirrorG.visible; whiteWall.visible = !mirrorG.visible; projG.visible = !mirrorG.visible; bScreen.classList.toggle('on', mirrorG.visible); };
 bTags.onclick = () => { showTags = !showTags; bTags.classList.toggle('on', showTags); };
 bList.onclick = () => { const on = list.style.display !== 'block'; list.style.display = on ? 'block' : 'none'; bList.classList.toggle('on', on); };
-list.innerHTML = '<h2>B1F の備品と根拠（LINE 11/12 時点）</h2><table>' + [
+list.innerHTML = '<h2>B1F の備品と根拠（LINE 11/12 時点）</h2><div class="note">行をクリックすると、その備品の場所へ視点が移動します</div><table>' + [
   ['会議テーブル W2700×D1000 H720<br>KANADEMONO THE TABLE ラバーウッド ブラウン × Black Steel（配線トレー付き）。天板は11/7着、脚は11/9着予定', '購入済', 1],
   ['デスク W1400×D700 H720<br>KANADEMONO THE TABLE ラバーウッド ブラウン × Black Steel', '購入済', 1],
-  ['ミーティングチェア ×6 黒<br>11/7に組立完了。形は商品写真を見ておらず推定', '組立済', 1],
+  ['ミーティングチェア ×6 黒<br>Knot antiques「COX DESK CHAIR」（PU）。LINE のリンク（flymee #112958）の商品写真をもとに再現。11/7に組立完了', '組立済', 1],
   ['ロッカー 白 8人用（4列2段）×3<br>11/7納品、11/15に組立予定', '納品済', 1],
   ['冷蔵庫 黒<br>入って左の奥の角、部屋向き。機種は未確認のため一般的な形', '設置済', 1],
-  ['電子レンジ<br>冷蔵庫の上に置く予定（追って購入）', '予定', 2],
+  ['電子レンジ 黒<br>パナソニックの黒（単機能 NE-FB2D-K を想定、W470×D390×H350）。冷蔵庫の上。冷蔵庫の天板の耐熱・耐荷重は要確認', '候補', 2],
   ['アーロンチェア ×3<br>ローカウンター用', '選定済', 2],
   ['ローカウンター<br>造作。棚・ベンチとあわせて同じラバーウッド ブラウンの色に統一', '造作', 2],
   ['モニター ×3（ローカウンター用）<br>これから購入。画面は24インチ相当で仮置き', '未購入', 3],
-  ['プロジェクター<br>候補は XGIMI HORIZON 20 / 20 Max。鏡を外した白壁に映す想定。未決定のため未配置', '検討中', 3],
-  ['棚 W1300×D380×H1800<br>入って右の壁の奥。黒スチール枠＋テーブルと同じ板。寸法は仮', '予定', 2],
-  ['ラグ ベージュ 3.6×2.6m<br>会議テーブルの下。サイズは提案', '提案', 3],
+  ['プロジェクター（天吊り）<br>XGIMI HORIZON 20 Max を想定（5,700 ISOルーメン、HDMI×2）。純正の天吊り金具はコンクリート天井専用。投影面は未決定（白壁に絵を掛けるため）。地デジは外付けレコーダー等が必要（部屋のアンテナ端子しだい）', '候補', 3],
+  ['空気清浄機<br>BALMUDA The Pure（ダークグレー・36畳・W260×D260×H700、約45,800円）を想定。扉を入って右。加湿なし', '候補', 3],
+  ['スタンドライト ×2<br>gram eight「LED バーライト ネオマンクス たて置きベースセット」（40,700円×2）。高さ約1.22m、調光・調色、リモコンとアプリ対応。白壁の両端、観葉植物の脇に置いて壁を照らす', '候補', 3],
+  ['HomePod ×2＋スピーカースタンド<br>HomePodはプロジェクターに直接つながらない。Apple TV 4K を挟み、HDMI eARC 経由で音を出す構成', '候補', 3],
+  ['コーヒーコーナー（棚の上）<br>卓上ウォーターサーバー（黒）、カプセル式コーヒーメーカー（黒）、カトラリースタンド、アロマディフューザー。共用マグはキッチンに収納するため置かない', '候補', 3],
+  ['掛け時計／壁の絵 ×3<br>時計は棚の上の壁。絵は INDOORPLUS の掛け絵（50×70cm・黒フレーム）を白壁に3枚、中心の高さ1.45m。絵柄は仮。白壁に絵を掛けるとプロジェクターを映す面と重なるため、投影場所は要検討。壁がコンクリートなので掛け方は要検討', '候補', 3],
+  ['玄関マット（MORE TIME ロゴ入り）／傘立て<br>扉を入ってすぐ。マットはグレー・900×600（仮）に、∞を上下に重ねたマーク＋ more time のロゴ（10/26 の SVG）を白一色で', '候補', 3],
+  ['洗面：液体石鹸ディスペンサー（白）／白いリードディフューザー', '候補', 3],
+  ['棚 W1300×D400×H約1080<br>KANADEMONO THE STORAGE SHELF 4段／ラバーウッド ブラウン × Black Steel（89,900円〜）。入って右、扉のすぐ先（デスクと位置を入れ替え）。高さは推定。書類箱はバンカーズボックス（A4用）を想定し、奥行を400に', '候補', 2],
+  ['ラグ ライトグレー 3.6×2.6m<br>東リ グレース GJ2549（土足可・業務3ランク、ナイロンのループパイル、撥水防汚・防炎）。自動見積もり 税込50,783円＋短辺2m超の製作費。実物の色は未確認', '候補', 3],
   ['ベンチ W1500×D300<br>KANADEMONO THE BENCH（BNC-K11-LN）を想定。高さは未確認で43cmと仮定', '候補', 2],
   ['デスクチェア ×1／プランター ×2', '未選定・仮', 3],
-  ['鍵付きの書類保管棚<br>ロッカーと合わせたい意向。未決定のため未配置', '検討中', 3],
-  ['ゴミ箱・傘立て・ティッシュケース<br>ゴミ箱・ティッシュケースは白系の仮置き。土足運用なので下駄箱なし', '仮置き', 3],
+  ['鍵付き書類ボックス 白 ×2<br>サンワダイレクト 100-LBOX006W（W350×D350×H350・積み重ね可）を想定。ロッカーの右どなり。山崎実業に鍵付きの書類収納は無い', '候補', 3],
+  ['ゴミ箱 ×3／ティッシュケース ×3／傘立て<br>山崎実業（tower）の白を想定。土足運用なので下駄箱なし', '候補', 3],
   ['鏡 → 白壁<br>鏡はすべて外して白壁にする予定。「鏡あり（現状）」で切替', '予定', 2],
   ['ステンレス曲面壁・洗面・照明・エアコン<br>現地写真のとおり既存を再現', '既存', 3],
 ].map(([a, b, c]) => `<tr><td>${a}</td><td class="st${c}">${b}</td></tr>`).join('') + '</table>';
+// 備品リストの行をクリックすると、その備品が見える位置へ視点が移動する（品名に含まれる言葉で場所を引く。上から順に最初に合ったもの）
+const FOCUS = [
+  ['会議テーブル', [2.62, .75, 2.54], [4.6, 1.9, 4.6]], ['ミーティングチェア', [2.6, .6, 3.3], [3.4, 1.6, 5.0]],
+  ['デスクチェア', [.27, .8, .62], [2.2, 1.5, 2.2]], ['デスク W', [1.28, .75, .4], [2.4, 1.6, 2.6]],
+  ['ロッカー', [2.36, .9, D - .3], [2.6, 1.6, 2.6]], ['電子レンジ', [W - .33, 1.4, .7], [4.3, 1.7, 1.9]], ['冷蔵庫', [W - .33, .8, .7], [3.9, 1.6, 2.2]],
+  ['アーロンチェア', [W - .8, .6, 2.09], [3.8, 1.7, 2.4]], ['ローカウンター', [W - .2, .8, 2.09], [3.8, 1.7, 2.4]], ['モニター', [W - .15, 1.0, 2.09], [4.2, 1.5, 2.2]],
+  ['空気清浄機', [5.06, .4, .19], [4.2, 1.5, 2.2]], ['スタンドライト', [.08, .8, 4.86], [2.4, 1.4, 3.6]], ['プロジェクター', [2.95, 2.27, 2.55], [4.6, 1.6, 4.2]], ['HomePod', [.3, .9, 3.84], [2.2, 1.4, 3.0]],
+  ['コーヒーコーナー', [2.5, 1.3, .25], [3.0, 1.7, 2.0]], ['棚 W', [2.67, .6, .25], [3.2, 1.5, 2.6]],
+  ['掛け時計', [.05, 1.45, 2.55], [3.4, 1.5, 2.6]], ['玄関マット', [4.2, .2, .4], [4.3, 1.9, 2.6]],
+  ['洗面：', [5.6, .95, 3.9], [2.75, 1.5, 3.75]], ['ラグ', [2.62, 0, 3.6], [2.6, 2.4, 5.4]], ['ベンチ', [2.42, .43, 4.33], [3.9, 1.6, 5.1]],
+  ['鍵付き', [3.94, .4, D - .2], [3.0, 1.5, 3.6]], ['ゴミ箱', [3.5, .3, .34], [3.6, 1.6, 2.4]],
+  ['鏡 →', [.1, 1.05, 3.5], [5.0, 1.55, 1.25]], ['ステンレス曲面壁', [5.0, 1.2, 4.4], [2.75, 1.5, 3.75]],
+];
+[...list.querySelectorAll('tr')].forEach(tr => {
+  const name = tr.cells[0].innerHTML.split('<br>')[0], f = FOCUS.find(([k]) => name.includes(k)); if (!f) return;
+  tr.classList.add('go'); tr.title = 'クリックでこの備品へ移動';
+  tr.onclick = () => { ceiling.visible = true; goal = { p: new THREE.Vector3(...f[2]), t: new THREE.Vector3(...f[1]), k: 0 }; [...list.querySelectorAll('tr')].forEach(r => r.classList.toggle('sel', r === tr)); [...document.querySelectorAll('#views button')].forEach(b => b.classList.remove('on')); };
+});
 
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 const v = new THREE.Vector3();
