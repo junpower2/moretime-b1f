@@ -546,20 +546,30 @@ place(aeron(), 1.28, 1.02, Math.PI);
 // ローカウンター（造作・監視モニターエリア）＋アーロンチェア2脚
 {
   const z0 = 1.06, z1 = 3.12, x0 = W - .45;
-  const top = box(x0, W, .68, .72, z0, z1, mWoodTop.clone()); top.material.map = (() => { const t = tex(woodC, 1.7, .6); t.rotation = Math.PI / 2; t.center.set(.5, .5); return t; })(); mats.push(top.material);
+  // 天板：奥の縁（壁ぎわ）に、モニターアームを挟むための切り欠き（幅120×奥行40mm）を2か所。JUN 11/13「これから造る」→ 造作時に依頼する想定
+  const ZS = [1.58, 2.60], NW = .06, ND = .04;
+  const mTop = mWoodTop.clone(); mTop.map = (() => { const t = tex(woodC, 1.7, .6); t.rotation = Math.PI / 2; t.center.set(.5, .5); return t; })(); mats.push(mTop);
+  box(x0, W - ND, .68, .72, z0, z1, mTop);
+  [[z0, ZS[0] - NW], [ZS[0] + NW, ZS[1] - NW], [ZS[1] + NW, z1]].forEach(([a, b]) => box(W - ND, W, .68, .72, a, b, mTop));
   for (const z of [z0, (z0 + z1) / 2 - .015, z1 - .03]) box(x0 + .03, W, 0, .68, z, z + .03, mOak);
-  box(W - .03, W - .01, .3, .68, z0, z1, mOak);
+  // 背板：切り欠きの下は金具が入るので当てない（各200mm幅で抜く）
+  [[z0, ZS[0] - .10], [ZS[0] + .10, ZS[1] - .10], [ZS[1] + .10, z1]].forEach(([a, b]) => box(W - .03, W - .01, .3, .68, a, b, mOak));
   blob(x0 + .2, (z0 + z1) / 2, .9, 3.2, .7);
   // 監視モニターエリア（JUN 11/13）：モニターは縦に2台重ね × 2組（計4台）、椅子は2脚、キーボードとマウスを各席に
-  [1.58, 2.60].forEach((z, i) => {
-    cyl(room, .11, .012, mBlack, W - .13, .726, z, 20); box(W - .13, W - .10, .73, 1.50, z - .02, z + .02, mBlack);   // 台座と支柱（上下2段用）
+  // アームはサンワダイレクト 100-LA031 の寸法（支柱 高さ708・径48mm、取り付け位置は天板から100〜665mm、クランプ式）
+  ZS.forEach((z, i) => {
+    const px = W - ND - .028;   // 支柱の中心：切り欠きの縁のすぐ手前
+    box(px - .035, W - .012, .72, .732, z - .0325, z + .0325, mBlack); box(W - ND, W - .012, .58, .72, z - .03, z + .03, mBlack); box(px - .03, W - .012, .58, .595, z - .03, z + .03, mBlack);   // クランプ（上の板・背・下の受け）
+    cyl(room, .008, .085, mAlu, px, .6375, z, 10);   // 締め付けネジ
+    cyl(room, .024, .708, mBlack, px, .72 + .354, z, 18);   // 支柱
     [[1.00, i === 0 ? 1 : 2], [1.36, i === 0 ? 0 : 3]].forEach(([y, k]) => {
-      box(W - .155, W - .13, y - .17, y + .17, z - .30, z + .30, mBlack, room, .008);
-      const scr = new THREE.Mesh(new THREE.PlaneGeometry(.57, .32), new THREE.MeshBasicMaterial({ map: tex(monitorCanvas(k), 1, 1), color: '#b8b8b8' })); scr.rotation.y = -Math.PI / 2; scr.position.set(W - .156, y, z); add(scr);
+      box(px - .125, px, y - .03, y + .03, z - .02, z + .02, mBlack); box(px - .135, px - .125, y - .056, y + .056, z - .0575, z + .0575, mBlack);   // アームとVESAプレート
+      box(px - .16, px - .135, y - .17, y + .17, z - .30, z + .30, mBlack, room, .008);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(.57, .32), new THREE.MeshBasicMaterial({ map: tex(monitorCanvas(k), 1, 1), color: '#b8b8b8' })); scr.rotation.y = -Math.PI / 2; scr.position.set(px - .161, y, z); add(scr);
     });
-    box(W - .40, W - .27, .72, .735, z - .22, z + .22, mBlackSoft, room, .004);   // キーボード（黒）
-    box(W - .39, W - .28, .735, .738, z - .21, z + .21, std({ color: '#2a2b2d', roughness: .8 }), room);   // キートップの面
-    box(W - .37, W - .27, .72, .745, z + .29, z + .35, mBlackSoft, room, .01);   // マウス（黒）
+    box(W - .42, W - .29, .72, .735, z - .22, z + .22, mBlackSoft, room, .004);   // キーボード（黒）
+    box(W - .41, W - .30, .735, .738, z - .21, z + .21, std({ color: '#2a2b2d', roughness: .8 }), room);   // キートップの面
+    box(W - .39, W - .29, .72, .745, z + .29, z + .35, mBlackSoft, room, .01);   // マウス（黒）
     place(aeron(), W - .80, z, Math.PI / 2);
   });
 }
@@ -789,7 +799,7 @@ list.innerHTML = '<h2>B1F の備品と根拠（LINE 11/12 時点）</h2><div cla
   ['冷蔵庫 黒<br>入って左の奥の角、部屋向き。機種は未確認のため一般的な形', '設置済', 1],
   ['電子レンジ 黒<br>パナソニックの黒（単機能 NE-FB2D-K を想定、W470×D390×H350）。冷蔵庫の上。冷蔵庫の天板の耐熱・耐荷重は要確認', '候補', 2],
   ['アーロンチェア ×2<br>ローカウンター（監視モニターエリア）用。3脚から2脚に変更（JUN 11/13）', '選定済', 2],
-  ['ローカウンター<br>造作。棚・ベンチとあわせて同じラバーウッド ブラウンの色に統一', '造作', 2],
+  ['ローカウンター<br>造作（これから造る）。棚・ベンチとあわせて同じラバーウッド ブラウンの色に統一。奥の縁（壁ぎわ）に、モニターアームを挟むための切り欠き（幅120×奥行40mm程度）を2か所。その下は背板を当てない。天板の厚みは20〜100mm', '造作', 2],
   ['モニター ×4（監視モニターエリア）<br>これから購入。縦に2台重ね×2組（JUN 11/13）。画面は24インチ相当で仮置き。上下2段のモニターアームかスタンドが2本必要。キーボードとマウスを各席に置く', '未購入', 4],
   ['プロジェクター（天吊り）<br>XGIMI HORIZON 20 Max を想定（5,700 ISOルーメン、HDMI×2）。純正の天吊り金具はコンクリート天井専用。投影面は未決定（白壁に絵を掛けるため）。地デジは外付けレコーダー等が必要（部屋のアンテナ端子しだい）', '候補', 3],
   ['空気清浄機 → ジアイーノ<br>パナソニック ジアイーノ F-MV5000C-H（次亜塩素酸の空間除菌脱臭機。グレー＝濃いグレー、W360×D220×H580、〜22畳／36㎡、公式ストア 99,990円）。黒は無く、色は白かグレー。扉を入って右。加湿は〜6畳ぶんと弱い。塩タブレットの補充と水の入れ替えが必要（JUN 11/13 に BALMUDA から変更）', '候補', 3],
